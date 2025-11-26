@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { clerkClient } from "@clerk/nextjs/server";
+import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs"; // important for raw body
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-11-20.acacia",
+  apiVersion: "2025-11-17.clover",
 });
 
 export async function POST(req: NextRequest) {
@@ -44,14 +45,15 @@ export async function POST(req: NextRequest) {
         if (!email || !customerId) break;
 
         // Find Clerk user by email
-        const users = await clerkClient.users.getUserList({
+        const client = await clerkClient();
+        const users = await client.users.getUserList({
           emailAddress: [email],
         });
 
         const user = users.data[0];
         if (!user) break;
 
-        await clerkClient.users.updateUser(user.id, {
+        await client.users.updateUser(user.id, {
           privateMetadata: {
             ...user.privateMetadata,
             stripeCustomerId: customerId,
@@ -66,6 +68,51 @@ export async function POST(req: NextRequest) {
         });
 
         console.log(`User ${user.id} marked as Pro with customer ${customerId}`);
+
+        // Track referral commission if applicable
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { clerkId: user.id },
+          });
+
+          if (dbUser?.referredBy) {
+            // Find the referral record
+            const referral = await prisma.referral.findFirst({
+              where: { referredUserId: user.id },
+            });
+
+            if (referral) {
+              // Mark referral as paying
+              await prisma.referral.update({
+                where: { id: referral.id },
+                data: {
+                  isPaying: true,
+                  subscriptionId: session.subscription as string,
+                },
+              });
+
+              // Create commission record (e.g., $10 per paying referral)
+              const commissionAmount = 1000; // $10 in cents
+              await prisma.commission.create({
+                data: {
+                  userId: referral.userId,
+                  referralId: referral.id,
+                  amount: commissionAmount,
+                  currency: "usd",
+                  type: "subscription",
+                  stripeEventId: event.id,
+                  status: "approved",
+                },
+              });
+
+              console.log(`Created commission for referrer ${referral.userId}`);
+            }
+          }
+        } catch (dbError) {
+          console.error("Database operation failed:", dbError);
+          // Don't fail the webhook if DB is not set up yet
+        }
+
         break;
       }
 

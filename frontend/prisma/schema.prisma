@@ -1,0 +1,103 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User referral tracking
+model User {
+  id              String   @id // Clerk user ID
+  clerkId         String   @unique
+  email           String   @unique
+  affiliateCode   String   @unique
+  referredBy      String?  // Affiliate code of referrer
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  referrals       Referral[] @relation("UserReferrals")
+  referrer        User?      @relation("UserReferrer", fields: [referredBy], references: [affiliateCode])
+  referredUsers   User[]     @relation("UserReferrer")
+  
+  commissions     Commission[]
+  payouts         Payout[]
+  
+  @@index([affiliateCode])
+  @@index([referredBy])
+}
+
+// Track each referral signup
+model Referral {
+  id              String   @id @default(cuid())
+  userId          String   // User who made the referral
+  referredUserId  String   // User who signed up
+  referredEmail   String
+  
+  isPaying        Boolean  @default(false)
+  subscriptionId  String?  @unique
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user            User     @relation("UserReferrals", fields: [userId], references: [id])
+  commissions     Commission[]
+  
+  @@index([userId])
+  @@index([referredUserId])
+}
+
+// Track commissions earned
+model Commission {
+  id              String   @id @default(cuid())
+  userId          String
+  referralId      String
+  
+  amount          Float    // Amount in cents
+  currency        String   @default("usd")
+  
+  stripeEventId   String   @unique
+  type            String   // "signup", "subscription", "renewal"
+  
+  status          String   @default("pending") // "pending", "approved", "paid"
+  
+  createdAt       DateTime @default(now())
+  paidAt          DateTime?
+  
+  user            User     @relation(fields: [userId], references: [id])
+  referral        Referral @relation(fields: [referralId], references: [id])
+  payout          Payout?  @relation(fields: [payoutId], references: [id])
+  payoutId        String?
+  
+  @@index([userId])
+  @@index([status])
+}
+
+// Track payouts to affiliates
+model Payout {
+  id              String   @id @default(cuid())
+  userId          String
+  
+  amount          Float    // Amount in cents
+  currency        String   @default("usd")
+  
+  status          String   @default("pending") // "pending", "processing", "completed", "failed"
+  method          String?  // "stripe", "paypal", "bank_transfer"
+  
+  stripePayoutId  String?  @unique
+  
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+  
+  user            User     @relation(fields: [userId], references: [id])
+  commissions     Commission[]
+  
+  @@index([userId])
+  @@index([status])
+}

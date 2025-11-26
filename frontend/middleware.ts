@@ -1,8 +1,8 @@
-import { authMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
-export default authMiddleware();
+export default clerkMiddleware();
 
-// Protect all routes except static files and the next internals
+// Protect all routes except static files and Next internals
 export const config = {
   matcher: ["/((?!.*\\..*|_next).*)"],
 };

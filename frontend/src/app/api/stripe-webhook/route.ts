@@ -91,8 +91,10 @@ export async function POST(req: NextRequest) {
                 },
               });
 
-              // Create commission record (e.g., $10 per paying referral)
-              const commissionAmount = 1000; // $10 in cents
+              // Calculate 30% commission on subscription amount
+              const subscriptionAmount = session.amount_total || 0; // Amount in cents
+              const commissionAmount = Math.floor(subscriptionAmount * 0.30); // 30% commission
+              
               await prisma.commission.create({
                 data: {
                   userId: referral.userId,

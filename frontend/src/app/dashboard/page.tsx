@@ -1,13 +1,13 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import SubscribeButton from "@/components/SubscribeButton";
+import { getCurrentBetterUUser } from "@/lib/currentBetterUUser";
 
 export default async function DashboardPage() {
-  const { userId } = await auth();
+  const user = await getCurrentBetterUUser();
 
-  if (!userId) {
+  if (!user) {
     redirect("/sign-in");
   }
 
@@ -54,7 +54,10 @@ export default async function DashboardPage() {
       <header className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">BetterU</h1>
-          <p className="text-sm text-slate-500">Better You, Better World.</p>
+          <p className="text-sm text-slate-500">
+            Better You, Better World.
+            {user.isPro && <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">PRO</span>}
+          </p>
         </div>
         <UserButton />
       </header>
@@ -80,7 +83,15 @@ export default async function DashboardPage() {
           ))}
         </section>
 
-        <SubscribeButton />
+        {!user.isPro && (
+          <div className="mb-8 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-200">
+            <h3 className="text-lg font-semibold mb-2">Upgrade to BetterU Pro</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Unlock unlimited features, advanced analytics, and priority support.
+            </p>
+            <SubscribeButton />
+          </div>
+        )}
       </main>
     </div>
   );

@@ -1,26 +1,22 @@
-import { currentUser } from "@clerk/nextjs/server";
+import { getCurrentBetterUUser } from "@/lib/currentBetterUUser";
 import Header from "@/components/Header";
 import InitializeAffiliateButton from "@/components/InitializeAffiliateButton";
 import CopyButton from "@/components/CopyButton";
 import ReferralStats from "@/components/ReferralStats";
 
 export default async function AffiliatePage() {
-  const user = await currentUser();
+  const user = await getCurrentBetterUUser();
 
   if (!user) {
     return <div className="p-6">Please sign in to view this page.</div>;
   }
 
-  const affiliateCode = user.publicMetadata.affiliateCode as string | undefined;
-  const hasCode = !!affiliateCode;
+  const hasCode = !!user.affiliateCode;
+  const displayCode = user.affiliateCode ?? `betteru-${user.id.slice(0, 6)}`;
 
-  const displayCode = affiliateCode ?? `betteru-${user.id.slice(0, 6)}`;
-
-  const origin =
-    process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
+  const origin = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const affiliateLink = `${origin}/sign-up?ref=${displayCode}`;
-  const referredBy = user.unsafeMetadata?.referredBy;
+  const referredBy = user.referredBy;
 
   return (
     <div className="min-h-screen bg-slate-50">

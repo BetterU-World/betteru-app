@@ -59,7 +59,7 @@ export default async function AffiliatePage() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-lg">Your Stats</h2>
             <span className={`text-xs px-2 py-1 rounded ${hasCode ? 'bg-green-100 text-green-800' : 'bg-gray-100'}`}>
-              {hasCode ? affiliateCode : displayCode + " (not initialized)"}
+              {hasCode ? user.affiliateCode : displayCode + " (not initialized)"}
             </span>
           </div>
           

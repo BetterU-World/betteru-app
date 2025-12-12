@@ -1,29 +1,17 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { readUploadedFile } from "@/lib/uploads";
+import { binaryResponse } from "@/lib/http/binaryResponse";
+import { requireDbUser } from "@/lib/auth/requireUser";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { userId: clerkUserId } = await auth();
+    const dbUser = await requireDbUser();
 
-    if (!clerkUserId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: clerkUserId },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const { id } = params;
+    const { id } = await context.params;
 
     // Find avatar file
     const avatarFile = await prisma.avatarFile.findUnique({
@@ -38,7 +26,7 @@ export async function GET(
     }
 
     // Check ownership - user can only access their own avatar
-    if (avatarFile.userId !== user.id) {
+    if (avatarFile.userId !== dbUser.id) {
       return NextResponse.json(
         { error: "Access denied" },
         { status: 403 }
@@ -48,16 +36,11 @@ export async function GET(
     // Read file from disk
     const fileBuffer = await readUploadedFile(avatarFile.path);
 
-    // Return file with appropriate headers
-    return new NextResponse(fileBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": avatarFile.mimeType,
-        "Content-Length": avatarFile.size.toString(),
-        "Content-Disposition": `inline; filename="avatar${getExtensionFromMimeType(avatarFile.mimeType)}"`,
-        "Cache-Control": "private, max-age=3600",
-      },
-    });
+    // Return file with standardized helper
+    const filename = `avatar${getExtensionFromMimeType(avatarFile.mimeType)}`;
+    const res = binaryResponse(fileBuffer, avatarFile.mimeType, filename);
+    res.headers.set("Cache-Control", "private, max-age=3600");
+    return res;
   } catch (error) {
     console.error("Avatar file serving error:", error);
     return NextResponse.json(

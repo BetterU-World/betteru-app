@@ -7,6 +7,7 @@ import DiaryEntryModal from "@/components/DiaryEntryModal";
 import NewDiaryEntryDialog from "@/components/diary/NewDiaryEntryDialog";
 import { getDatesWithEntries, formatDateForAPI } from "@/lib/calendar-utils";
 import type { CalendarSuggestion } from "@prisma/client";
+import { encryptDiaryContent, decryptDiaryContent, EncryptedDiaryPayload } from "@/lib/crypto/diary";
 
 interface DiaryMedia {
   id: string;
@@ -162,16 +163,32 @@ export default function DiaryPage() {
 
     try {
       setLoading(true);
-      
-      // First create the diary entry
+      let payload: any = { title: title.trim(), date: new Date().toISOString() };
+      // If diary is locked, require PIN and encrypt client-side
+      if (locked) {
+        if (!/^[0-9]{4,6}$/.test(pin)) {
+          alert("Enter your 4–6 digit PIN to encrypt");
+          setLoading(false);
+          return;
+        }
+        const enc: EncryptedDiaryPayload = await encryptDiaryContent(pin, content.trim());
+        payload = {
+          ...payload,
+          contentCiphertext: enc.ciphertextB64,
+          contentIv: enc.ivB64,
+          contentSalt: enc.saltB64,
+          contentAlg: enc.alg,
+        };
+      } else {
+        // Legacy: store plaintext when lock disabled (server will avoid storing long-term if switched later)
+        payload = { ...payload, content: content.trim() };
+      }
+
+      // Create the diary entry
       const res = await fetch("/api/diary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(),
-          content: content.trim(),
-          date: new Date().toISOString(),
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -200,7 +217,7 @@ export default function DiaryPage() {
         }
       }
 
-      // Add new entry to the top of the list
+      // Add new entry to the top of the list (no plaintext in memory if locked)
       setEntries([data.entry, ...entries]);
       
       // Clear form
@@ -332,10 +349,25 @@ export default function DiaryPage() {
 
   const handleCreateEntry = async (entryData: { title: string; content: string; date: string }) => {
     try {
+      let payload: any = { title: entryData.title, date: entryData.date };
+      if (locked) {
+        if (!/^[0-9]{4,6}$/.test(pin)) throw new Error("PIN required to encrypt");
+        const enc: EncryptedDiaryPayload = await encryptDiaryContent(pin, entryData.content);
+        payload = {
+          ...payload,
+          contentCiphertext: enc.ciphertextB64,
+          contentIv: enc.ivB64,
+          contentSalt: enc.saltB64,
+          contentAlg: enc.alg,
+        };
+      } else {
+        payload = { ...payload, content: entryData.content };
+      }
+
       const res = await fetch("/api/diary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(entryData),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {

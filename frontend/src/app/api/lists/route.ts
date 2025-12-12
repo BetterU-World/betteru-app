@@ -129,13 +129,13 @@ export async function PATCH(req: NextRequest) {
 
     const updateData: {
       name?: string;
-      description?: string | null;
+      description?: string;
       color?: string;
-    } = {};
-
-    if (name !== undefined) updateData.name = name;
-    if (description !== undefined) updateData.description = description || null;
-    if (color !== undefined) updateData.color = color;
+    } = {
+      ...(name !== undefined ? { name } : {}),
+      ...(color !== undefined ? { color } : {}),
+      ...(description !== undefined ? { description: description ?? "" } : {}),
+    };
 
     const updatedList = await prisma.list.update({
       where: { id },

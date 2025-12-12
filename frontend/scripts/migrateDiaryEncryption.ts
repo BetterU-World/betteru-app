@@ -6,7 +6,7 @@ async function run() {
   const batch = await prisma.diaryEntry.findMany({
     where: {
       encryptedContent: null,
-      OR: [{ content: { not: null } }, { content: { not: "" } }],
+      content: { not: "" },
     },
     select: { id: true, content: true },
   });

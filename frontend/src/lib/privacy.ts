@@ -1,3 +1,21 @@
+export const DEFAULT_ZERO_TRACKING = true;
+
+export type PrivacyUser = {
+  zeroTrackingMode?: boolean | null;
+  analyticsOptInAt?: Date | string | null;
+};
+
+export function shouldTrack(user: PrivacyUser | null | undefined): boolean {
+  if (!user) return false;
+  return user.zeroTrackingMode ? false : true;
+}
+
+export function getPrivacySettings(user: PrivacyUser | null | undefined) {
+  return {
+    zeroTrackingMode: !!(user && user.zeroTrackingMode),
+    analyticsOptInAt: user?.analyticsOptInAt ?? null,
+  };
+}
 import prisma from "@/lib/prisma";
 
 export async function getUserPrivacySettings(userId: string) {

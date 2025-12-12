@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
-import { auth, clerkClient } from "@clerk/nextjs/server";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-11-20.acacia",
-});
+import { stripe } from "@/lib/stripe";
+import { getClerkClient } from "@/lib/clerk";
+import { requireUserId } from "@/lib/auth/requireUser";
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await auth();
-
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const userId = await requireUserId();
 
     // Get user from Clerk to read metadata
-    const user = await clerkClient.users.getUser(userId);
+    const client = await getClerkClient();
+    const user = await client.users.getUser(userId);
     const stripeCustomerId =
       user.privateMetadata.stripeCustomerId as string | undefined;
 

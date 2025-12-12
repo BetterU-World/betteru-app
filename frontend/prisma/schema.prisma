@@ -75,6 +75,9 @@ model User {
   acceptedTermsAt        DateTime?
   acceptedPrivacyVersion String?
   acceptedPrivacyAt      DateTime?
+  // Privacy tracking
+  zeroTrackingMode       Boolean  @default(true)
+  analyticsOptInAt       DateTime?
   Commission          Commission[]
   Payout              Payout[]
   Referral            Referral[]
@@ -108,8 +111,13 @@ model DiaryEntry {
   userId           String
   date             DateTime          @default(now())
   title            String?
-  content          String
-  encryptedContent String?
+  content          String            @default("") // legacy plaintext (deprecated)
+  encryptedContent String?           // legacy server-side encryption (deprecated)
+  // Client-side encryption payload (preferred)
+  contentCiphertext String?
+  contentIv         String?
+  contentSalt       String?
+  contentAlg        String?
   contentPreview   String?
   mood             String? // AI-ready: for future mood analysis
   tags             String[]          @default([]) // AI-ready: for theme categorization
@@ -205,6 +213,7 @@ model UserPrivacySettings {
   zeroTrackingMode Boolean  @default(false)
   diaryLockEnabled Boolean  @default(false)
   diaryLockHash    String?
+  diaryPinSalt     String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

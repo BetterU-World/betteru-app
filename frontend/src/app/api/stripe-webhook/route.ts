@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { clerkClient } from "@clerk/nextjs/server";
+import { getClerkClient } from "@/lib/clerk";
 import prisma from "@/lib/prisma";
 import { calculateRevenueSplit } from "@/lib/payments";
 
 export const runtime = "nodejs"; // important for raw body
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2025-11-17.clover",
-});
+import { stripe } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
   const sig = req.headers.get("stripe-signature");
@@ -46,7 +44,7 @@ export async function POST(req: NextRequest) {
         if (!email || !customerId) break;
 
         // Find Clerk user by email
-        const client = await clerkClient();
+        const client = await getClerkClient();
         const users = await client.users.getUserList({
           emailAddress: [email],
         });

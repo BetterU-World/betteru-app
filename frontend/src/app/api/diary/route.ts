@@ -3,7 +3,8 @@ import { auth } from "@clerk/nextjs/server";
 import prisma from "@/lib/prisma";
 import { getSystemCalendarBySlug } from "@/lib/calendars/defaults";
 import { getPrismaUserIdFromClerk } from "@/lib/user-helpers";
-import { encryptDiaryContent, decryptDiaryContent, makePreview } from "@/lib/encryption";
+// Server must not encrypt/decrypt diary body when client-side encryption is enabled
+import { makePreview } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
   try {
@@ -45,23 +46,28 @@ export async function GET(req: NextRequest) {
         },
       },
     });
-    // Decrypt content server-side before returning
-    const decrypted = (entries as any[]).map((e: any) => {
-      let content = "";
-      try {
-        if (e.encryptedContent) {
-          content = decryptDiaryContent(e.encryptedContent);
-        } else {
-          content = e.content ?? ""; // legacy fallback
-        }
-      } catch {
-        content = "[unreadable]";
-      }
-      const { encryptedContent, ...rest } = e;
-      return { ...rest, content };
+    // Do NOT decrypt on server. Return metadata + previews only.
+    const sanitized = (entries as any[]).map((e: any) => {
+      const {
+        // redact any body-like fields
+        content,
+        encryptedContent,
+        contentCiphertext,
+        contentIv,
+        contentSalt,
+        contentAlg,
+        ...rest
+      } = e;
+      return {
+        ...rest,
+        content: "", // client should fetch and decrypt if needed
+        contentPreview: e.contentPreview ?? null,
+        // include encryption payload presence flags for client
+        hasEncryptedPayload: !!(e.contentCiphertext && e.contentIv && e.contentSalt),
+      };
     });
 
-    return NextResponse.json({ entries: decrypted });
+    return NextResponse.json({ entries: sanitized });
   } catch (error: any) {
     console.error("Error fetching diary entries:", error);
     return NextResponse.json(
@@ -85,7 +91,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { title, content, date } = body;
+    const { title, content, date, contentCiphertext, contentIv, contentSalt, contentAlg } = body;
 
     if (!title || !content) {
       return NextResponse.json(
@@ -98,22 +104,21 @@ export async function POST(req: NextRequest) {
 
     const diaryCalendar = await getSystemCalendarBySlug(userId, "diary");
 
-    let encrypted: string;
-    try {
-      encrypted = encryptDiaryContent(content);
-    } catch (e) {
-      return NextResponse.json({ error: "Encryption misconfigured" }, { status: 500 });
-    }
-
-    const preview = makePreview(content);
+    // If client-side encrypted payload is provided, store it as-is
+    const preview = makePreview(typeof content === "string" ? content : "");
 
     const [entry] = await prisma.$transaction([
       (prisma as any).diaryEntry.create({
         data: {
           userId,
           title,
-          content: "", // do not store plaintext
-          encryptedContent: encrypted as any,
+          // Prefer client-side encryption payload when provided
+          content: typeof content === "string" ? "" : "",
+          encryptedContent: null,
+          contentCiphertext: contentCiphertext ?? null,
+          contentIv: contentIv ?? null,
+          contentSalt: contentSalt ?? null,
+          contentAlg: contentAlg ?? (contentCiphertext ? "AES-GCM" : null),
           contentPreview: preview as any,
           date: entryDate,
         },
@@ -136,8 +141,8 @@ export async function POST(req: NextRequest) {
       }),
     ]);
 
-    // Return with decrypted content shape
-    return NextResponse.json({ entry: { ...entry, content } }, { status: 201 });
+    // Return without body; client keeps local plaintext
+    return NextResponse.json({ entry }, { status: 201 });
   } catch (error: any) {
     console.error("Error creating diary entry:", error);
     return NextResponse.json(
@@ -161,7 +166,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { id, title, content, date } = body;
+    const { id, title, content, date, contentCiphertext, contentIv, contentSalt, contentAlg } = body;
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "Diary entry ID is required" }, { status: 400 });
     }
@@ -173,16 +178,10 @@ export async function PATCH(req: NextRequest) {
 
     const entryDate = date ? new Date(date) : existing.date;
     const newTitle = title ?? existing.title;
-    const newContent = content ?? existing.content ?? "";
+    const newContent = typeof content === "string" ? content : "";
 
     const diaryCalendar = await getSystemCalendarBySlug(userId, "diary");
 
-    let encryptedUpdate: string;
-    try {
-      encryptedUpdate = encryptDiaryContent(newContent);
-    } catch (e) {
-      return NextResponse.json({ error: "Encryption misconfigured" }, { status: 500 });
-    }
     const previewUpdate = makePreview(newContent);
 
     const [updated] = await prisma.$transaction([
@@ -190,8 +189,12 @@ export async function PATCH(req: NextRequest) {
         where: { id },
         data: {
           title: newTitle,
-          content: "", // stop storing plaintext
-          encryptedContent: encryptedUpdate as any,
+          content: "", // stop storing plaintext when client encryption present
+          encryptedContent: null,
+          contentCiphertext: contentCiphertext ?? existing.contentCiphertext ?? null,
+          contentIv: contentIv ?? existing.contentIv ?? null,
+          contentSalt: contentSalt ?? existing.contentSalt ?? null,
+          contentAlg: contentAlg ?? existing.contentAlg ?? (contentCiphertext ? "AES-GCM" : null),
           contentPreview: previewUpdate as any,
           date: entryDate,
         },
@@ -209,7 +212,8 @@ export async function PATCH(req: NextRequest) {
       }),
     ]);
 
-    return NextResponse.json({ ...updated, content: newContent });
+    // Do not return plaintext body; client owns decryption
+    return NextResponse.json({ entry: updated });
   } catch (error: any) {
     console.error("Error updating diary entry:", error);
     return NextResponse.json(

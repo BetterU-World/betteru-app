@@ -15,6 +15,7 @@ export async function POST(request: Request) {
     if (!clerkUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const user = await prisma.user.findUnique({ where: { clerkId: clerkUserId } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const uid = user.id;
 
     const body = await request.json().catch(() => ({}));
     const deviceHash = (body?.deviceHash as string) || null;
@@ -22,9 +23,9 @@ export async function POST(request: Request) {
     const ua = request.headers.get("user-agent") || null;
 
     await prisma.userSecuritySignal.upsert({
-      where: { userId: user.id },
+      where: { userId: uid },
       update: { lastSeenIp: ip || undefined, lastSeenUserAgent: ua || undefined, deviceHash: deviceHash || undefined },
-      create: { userId: user.id, lastSeenIp: ip || undefined, lastSeenUserAgent: ua || undefined, deviceHash: deviceHash || undefined },
+      create: { userId: uid, lastSeenIp: ip || undefined, lastSeenUserAgent: ua || undefined, deviceHash: deviceHash || undefined },
     });
 
     const now = new Date();
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
     let deviceUsers: string[] = [];
     if (deviceHash) {
       const signals = await prisma.userSecuritySignal.findMany({ where: { deviceHash }, select: { userId: true } });
-      const uniq = Array.from(new Set(signals.map((s) => s.userId))).filter((id) => id !== user.id);
+      const uniq = Array.from(new Set(signals.map((s) => s.userId))).filter((id) => id !== uid);
       deviceUsersCount = uniq.length;
       deviceUsers = uniq;
     }
@@ -46,18 +47,18 @@ export async function POST(request: Request) {
     let ipUsers: string[] = [];
     if (ip) {
       const signals = await prisma.userSecuritySignal.findMany({ where: { lastSeenIp: ip }, select: { userId: true } });
-      const uniq = Array.from(new Set(signals.map((s) => s.userId))).filter((id) => id !== user.id);
+      const uniq = Array.from(new Set(signals.map((s) => s.userId))).filter((id) => id !== uid);
       ipUsersCount = uniq.length;
       ipUsers = uniq;
     }
 
     async function createFlagIfNeeded(type: "MULTI_ACCOUNT_SUSPECTED" | "IP_REUSE_HIGH" | "DEVICE_REUSE_HIGH", severity: number, reason: string, metadata: any) {
       const recentUnresolved = await prisma.securityFlag.findFirst({
-        where: { userId: user.id, type, resolvedAt: null, createdAt: { gte: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000) } },
+        where: { userId: uid, type, resolvedAt: null, createdAt: { gte: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000) } },
       });
       if (recentUnresolved) return;
       await prisma.securityFlag.create({
-        data: { userId: user.id, type, severity, reason, metadata },
+        data: { userId: uid, type, severity, reason, metadata },
       });
     }
 

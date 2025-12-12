@@ -85,9 +85,11 @@ export function SuggestionsDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Sparkles className="w-6 h-6 text-purple-500" />
-            Smart Calendar Suggestions
+          <DialogTitle>
+            <div className="flex items-center gap-2 text-xl">
+              <Sparkles className="w-6 h-6 text-purple-500" />
+              Smart Calendar Suggestions
+            </div>
           </DialogTitle>
         </DialogHeader>
 

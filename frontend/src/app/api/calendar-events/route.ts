@@ -1,23 +1,10 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { requireDbUser } from "@/lib/auth/requireUser";
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId: clerkUserId } = await auth();
-
-    if (!clerkUserId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: clerkUserId },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const user = await requireDbUser();
 
     // Parse query parameters
     const { searchParams } = new URL(request.url);
@@ -140,20 +127,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId: clerkUserId } = await auth();
-
-    if (!clerkUserId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: clerkUserId },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const user = await requireDbUser();
 
     const body = await request.json();
     const { title, description, date, startTime, endTime, allDay, diaryEntryId, userCalendarId } = body;

@@ -15,6 +15,9 @@ export async function GET(req: NextRequest) {
     }
 
     const userId = await getPrismaUserIdFromClerk(clerkUserId);
+    if (!userId) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
     const { searchParams } = new URL(req.url);
     const listId = searchParams.get("listId");
 

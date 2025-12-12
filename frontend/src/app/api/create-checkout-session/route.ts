@@ -1,22 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
+import { stripe } from "@/lib/stripe";
 
 export const runtime = "nodejs"; // ensure we can read the raw body / use Stripe properly
 export const dynamic = "force-dynamic";
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const priceId = process.env.STRIPE_PRICE_ID;
 
-if (!stripeSecretKey) {
-  throw new Error("Missing STRIPE_SECRET_KEY in environment");
-}
 if (!priceId) {
   throw new Error("Missing STRIPE_PRICE_ID in environment");
 }
-
-const stripe = new Stripe(stripeSecretKey, {
-  apiVersion: "2024-06-20",
-});
 
 export async function POST(req: NextRequest) {
   try {

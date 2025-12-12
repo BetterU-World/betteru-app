@@ -1,29 +1,17 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { readUploadedFile } from "@/lib/uploads";
+import { binaryResponse } from "@/lib/http/binaryResponse";
+import { requireDbUser } from "@/lib/auth/requireUser";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { userId: clerkUserId } = await auth();
+    const user = await requireDbUser();
 
-    if (!clerkUserId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Get user from database
-    const user = await prisma.user.findUnique({
-      where: { clerkId: clerkUserId },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const { id } = params;
+    const { id } = await params;
 
     // Find diary attachment
     const attachment = await prisma.diaryAttachment.findUnique({
@@ -55,16 +43,10 @@ export async function GET(
     const isVideo = attachment.mimeType.startsWith("video/");
     const disposition = isVideo ? "inline" : "inline";
 
-    // Return file with appropriate headers
-    return new NextResponse(fileBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": attachment.mimeType,
-        "Content-Length": attachment.size.toString(),
-        "Content-Disposition": `${disposition}; filename="attachment${getExtensionFromMimeType(attachment.mimeType)}"`,
-        "Cache-Control": "private, max-age=3600",
-      },
-    });
+    const filename = `attachment${getExtensionFromMimeType(attachment.mimeType)}`;
+    const res = binaryResponse(fileBuffer, attachment.mimeType, filename);
+    res.headers.set("Cache-Control", "private, max-age=3600");
+    return res;
   } catch (error) {
     console.error("Diary attachment serving error:", error);
     return NextResponse.json(

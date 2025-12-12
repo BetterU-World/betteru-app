@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import prisma from "@/lib/prisma";
-import { getPrismaUserIdFromClerk } from "@/lib/user-helpers";
+import { requireDbUser } from "@/lib/auth/requireUser";
 
 /**
  * POST /api/calendar-suggestions/[id]/dismiss
@@ -12,15 +11,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { userId: clerkUserId } = await auth();
-    if (!clerkUserId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const userId = await getPrismaUserIdFromClerk(clerkUserId);
-    if (!userId) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const user = await requireDbUser();
 
     const { id } = await params;
 
@@ -28,7 +19,7 @@ export async function POST(
     const suggestion = await prisma.calendarSuggestion.findFirst({
       where: {
         id,
-        userId,
+        userId: user.id,
       },
     });
 

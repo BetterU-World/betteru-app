@@ -33,16 +33,25 @@ export default function PrivacySettingsPage() {
 
   async function toggleZeroTrackingMode() {
     if (!settings) return;
+    const next = !settings.zeroTrackingMode;
+    if (!next) {
+      const confirm = window.confirm(
+        "This enables anonymous analytics to help improve the product. No sale of personal data. Continue?"
+      );
+      if (!confirm) return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/settings/privacy", {
+      const res = await fetch("/api/privacy/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ zeroTrackingMode: !settings.zeroTrackingMode }),
+        body: JSON.stringify({ zeroTrackingMode: next }),
       });
       const data = await res.json();
-      setSettings(data.settings);
+      if (!res.ok) throw new Error();
+      setSettings({ ...settings, zeroTrackingMode: data.zeroTrackingMode });
+      setSuccess("Privacy settings updated");
     } catch (e) {
       setError("Failed to update settings");
     } finally {
@@ -197,7 +206,7 @@ export default function PrivacySettingsPage() {
                 onChange={toggleZeroTrackingMode}
                 disabled={loading}
               />
-              <span>Enable Zero-Tracking Mode</span>
+                <span>Enable Zero-Tracking Mode</span>
             </label>
           </section>
 

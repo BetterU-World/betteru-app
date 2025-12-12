@@ -28,13 +28,14 @@ export async function middleware(request: NextRequest) {
   try {
     const user = await prisma.user.findUnique({ where: { clerkId: userId } });
     if (!user) return NextResponse.next();
+    const u: any = user as any;
     const needs = needsPolicyAcceptance({
-      isAdultConfirmed: user.isAdultConfirmed,
-      adultConfirmedAt: user.adultConfirmedAt,
-      acceptedTermsVersion: user.acceptedTermsVersion,
-      acceptedTermsAt: user.acceptedTermsAt,
-      acceptedPrivacyVersion: user.acceptedPrivacyVersion,
-      acceptedPrivacyAt: user.acceptedPrivacyAt,
+      isAdultConfirmed: u.isAdultConfirmed,
+      adultConfirmedAt: u.adultConfirmedAt,
+      acceptedTermsVersion: u.acceptedTermsVersion,
+      acceptedTermsAt: u.acceptedTermsAt,
+      acceptedPrivacyVersion: u.acceptedPrivacyVersion,
+      acceptedPrivacyAt: u.acceptedPrivacyAt,
     });
     if (needs) {
       const url = request.nextUrl.clone();

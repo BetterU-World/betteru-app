@@ -1,0 +1,213 @@
+import prisma from "@/lib/prisma";
+
+export type SystemCalendarType = "Diary" | "Finances" | "Goals" | "Lists";
+
+export interface SystemCalendars {
+  diaryCalendar: {
+    id: string;
+    name: string;
+    color: string;
+    userId: string;
+  };
+  financesCalendar: {
+    id: string;
+    name: string;
+    color: string;
+    userId: string;
+  };
+  goalsCalendar: {
+    id: string;
+    name: string;
+    color: string;
+    userId: string;
+  };
+  listsCalendar: {
+    id: string;
+    name: string;
+    color: string;
+    userId: string;
+  };
+  allCalendars: Array<{
+    id: string;
+    name: string;
+    color: string;
+    userId: string;
+  }>;
+}
+
+const SYSTEM_CALENDARS = {
+  Diary: { color: "#f97316" }, // orange
+  Finances: { color: "#22c55e" }, // green
+  Goals: { color: "#3b82f6" }, // blue
+  Lists: { color: "#10b981" }, // emerald green
+} as const;
+
+/**
+ * Ensures that the user has the four system calendars (Diary, Finances, Goals, Lists).
+ * Creates them if they don't exist. Returns all four calendars plus the full list.
+ */
+export async function getOrCreateSystemCalendars(
+  userId: string
+): Promise<SystemCalendars> {
+  // Fetch existing calendars for this user with these specific names
+  const existingCalendars = await prisma.calendar.findMany({
+    where: {
+      userId,
+      name: { in: ["Diary", "Finances", "Goals", "Lists"] },
+    },
+  });
+
+  const existingMap = new Map(
+    existingCalendars.map((cal: { name: string; id: string; color: string; userId: string }) => [cal.name, cal])
+  );
+
+  // Create any missing system calendars
+  const calendarsToCreate: Array<{
+    name: SystemCalendarType;
+    color: string;
+  }> = [];
+
+  for (const [name, { color }] of Object.entries(SYSTEM_CALENDARS)) {
+    if (!existingMap.has(name)) {
+      calendarsToCreate.push({ name: name as SystemCalendarType, color });
+    }
+  }
+
+  if (calendarsToCreate.length > 0) {
+    await prisma.calendar.createMany({
+      data: calendarsToCreate.map((cal) => ({
+        userId,
+        name: cal.name,
+        color: cal.color,
+      })),
+    });
+
+    // Re-fetch to get the newly created calendars with their IDs
+    const allSystemCalendars = await prisma.calendar.findMany({
+      where: {
+        userId,
+        name: { in: ["Diary", "Finances", "Goals", "Lists"] },
+      },
+    });
+
+    for (const cal of allSystemCalendars) {
+      existingMap.set(cal.name, cal);
+    }
+  }
+
+  const diaryCalendar = existingMap.get("Diary") as {
+    id: string;
+    name: string;
+    color: string;
+    userId: string;
+  };
+  const financesCalendar = existingMap.get("Finances") as {
+    id: string;
+    name: string;
+    color: string;
+    userId: string;
+  };
+  const goalsCalendar = existingMap.get("Goals") as {
+    id: string;
+    name: string;
+    color: string;
+    userId: string;
+  };
+  const listsCalendar = existingMap.get("Lists") as {
+    id: string;
+    name: string;
+    color: string;
+    userId: string;
+  };
+
+  return {
+    diaryCalendar,
+    financesCalendar,
+    goalsCalendar,
+    listsCalendar,
+    allCalendars: [diaryCalendar, financesCalendar, goalsCalendar, listsCalendar],
+  };
+}
+
+/**
+ * Get the internal Prisma user ID from a Clerk user ID.
+ * Creates the user if they don't exist.
+ */
+export async function getPrismaUserIdFromClerk(
+  clerkUserId: string
+): Promise<string | null> {
+  let user = await prisma.user.findUnique({
+    where: { clerkId: clerkUserId },
+    select: { id: true },
+  });
+
+  // If user doesn't exist, create them
+  if (!user) {
+    // Generate a unique affiliate code (8 random alphanumeric characters)
+    const affiliateCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+    
+    user = await prisma.user.create({
+      data: {
+        clerkId: clerkUserId,
+        email: `${clerkUserId}@temp.local`, // Temporary email, will be updated by webhook
+        affiliateCode,
+      },
+      select: { id: true },
+    });
+  }
+
+  return user.id;
+}
+
+/**
+ * Sync a diary entry to a calendar event in the Diary calendar
+ */
+export async function syncDiaryEntryToCalendar(
+  userId: string,
+  diaryEntry: {
+    id: string;
+    title: string;
+    content: string;
+    date: Date;
+  }
+): Promise<void> {
+  const systemCalendars = await getOrCreateSystemCalendars(userId);
+  const diaryCalendarId = systemCalendars.diaryCalendar.id;
+
+  // Check if event already exists for this diary entry
+  // We'll use a convention: store diary entry ID in the description or use title matching
+  const existingEvent = await prisma.calendarEvent.findFirst({
+    where: {
+      userId,
+      calendarId: diaryCalendarId,
+      start: {
+        gte: new Date(diaryEntry.date.setHours(0, 0, 0, 0)),
+        lt: new Date(diaryEntry.date.setHours(23, 59, 59, 999)),
+      },
+      title: diaryEntry.title,
+    },
+  });
+
+  const eventData = {
+    userId,
+    calendarId: diaryCalendarId,
+    title: diaryEntry.title,
+    description: diaryEntry.content.substring(0, 200), // First 200 chars
+    start: new Date(diaryEntry.date.setHours(0, 0, 0, 0)),
+    end: new Date(diaryEntry.date.setHours(23, 59, 59, 999)),
+    allDay: true,
+  };
+
+  if (existingEvent) {
+    // Update existing event
+    await prisma.calendarEvent.update({
+      where: { id: existingEvent.id },
+      data: eventData,
+    });
+  } else {
+    // Create new event
+    await prisma.calendarEvent.create({
+      data: eventData,
+    });
+  }
+}

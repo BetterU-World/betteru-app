@@ -7,7 +7,7 @@ datasource db {
 }
 
 model Commission {
-  id            String    @id
+  id            String    @id @default(cuid())
   userId        String
   referralId    String
   amount        Float
@@ -27,7 +27,7 @@ model Commission {
 }
 
 model Payout {
-  id             String       @id
+  id             String       @id @default(cuid())
   userId         String
   amount         Float
   currency       String       @default("usd")
@@ -44,14 +44,14 @@ model Payout {
 }
 
 model Referral {
-  id             String       @id
+  id             String       @id @default(cuid())
   userId         String
   referredUserId String
   referredEmail  String
   isPaying       Boolean      @default(false)
   subscriptionId String?      @unique
   createdAt      DateTime     @default(now())
-  updatedAt      DateTime
+  updatedAt      DateTime     @updatedAt
   Commission     Commission[]
   User           User         @relation(fields: [userId], references: [id])
 
@@ -60,19 +60,409 @@ model Referral {
 }
 
 model User {
-  id            String       @id
-  clerkId       String       @unique
-  email         String       @unique
-  affiliateCode String       @unique
-  referredBy    String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime
-  Commission    Commission[]
-  Payout        Payout[]
-  Referral      Referral[]
-  User          User?        @relation("UserToUser", fields: [referredBy], references: [affiliateCode])
-  other_User    User[]       @relation("UserToUser")
+  id                  String               @id @default(cuid())
+  clerkId             String               @unique
+  email               String               @unique
+  affiliateCode       String               @unique
+  referredBy          String?
+  profileImageUrl     String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  // Legal & eligibility fields
+  isAdultConfirmed       Boolean  @default(false)
+  adultConfirmedAt       DateTime?
+  acceptedTermsVersion   String?
+  acceptedTermsAt        DateTime?
+  acceptedPrivacyVersion String?
+  acceptedPrivacyAt      DateTime?
+  Commission          Commission[]
+  Payout              Payout[]
+  Referral            Referral[]
+  FinanceTransaction  FinanceTransaction[]
+  Goal                Goal[]
+  GoalMilestone       GoalMilestone[]
+  List                List[]
+  ListItem            ListItem[]
+  DiaryMedia          DiaryMedia[]
+  AvatarFile          AvatarFile?
+  DiaryAttachment     DiaryAttachment[]
+  CalendarEvent       CalendarEvent[]
+  CalendarSuggestion  CalendarSuggestion[]
+  DiaryEntry          DiaryEntry[]
+  Habit               Habit[]
+  HabitCompletion     HabitCompletion[]
+  UserCalendar        UserCalendar[]
+  UserPrivacySettings UserPrivacySettings?
+  UserSecuritySignal  UserSecuritySignal?
+  SecurityFlag        SecurityFlag[]
+  User                User?                @relation("UserToUser", fields: [referredBy], references: [affiliateCode])
+  other_User          User[]               @relation("UserToUser")
 
   @@index([affiliateCode])
   @@index([referredBy])
+}
+
+// After updating this model, run: npx prisma migrate dev --name add_diary
+model DiaryEntry {
+  id               String            @id @default(cuid())
+  userId           String
+  date             DateTime          @default(now())
+  title            String?
+  content          String
+  encryptedContent String?
+  contentPreview   String?
+  mood             String? // AI-ready: for future mood analysis
+  tags             String[]          @default([]) // AI-ready: for theme categorization
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  media            DiaryMedia[]
+  attachments      DiaryAttachment[]
+  calendarEvent    CalendarEvent[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+}
+
+enum DiaryMediaType {
+  IMAGE
+  VIDEO
+}
+
+model DiaryMedia {
+  id        String         @id @default(cuid())
+  entryId   String
+  userId    String
+  type      DiaryMediaType
+  url       String
+  createdAt DateTime       @default(now())
+
+  entry DiaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  user  User       @relation(fields: [userId], references: [id])
+
+  @@index([entryId])
+  @@index([userId])
+}
+
+// Secure file upload metadata models
+model AvatarFile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  path      String
+  mimeType  String
+  size      Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DiaryAttachment {
+  id           String   @id @default(cuid())
+  userId       String
+  diaryEntryId String
+  path         String
+  mimeType     String
+  size         Int
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  diaryEntry DiaryEntry @relation(fields: [diaryEntryId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([diaryEntryId])
+}
+
+// After updating this schema, run: npx prisma migrate dev --name update_calendar_system
+model CalendarEvent {
+  id                   String    @id @default(cuid())
+  userId               String
+  title                String
+  description          String?
+  date                 DateTime
+  startTime            DateTime?
+  endTime              DateTime?
+  allDay               Boolean   @default(false)
+  userCalendarId       String?
+  diaryEntryId         String?
+  financeTransactionId String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userCalendar       UserCalendar?       @relation(fields: [userCalendarId], references: [id], onDelete: SetNull)
+  diaryEntry         DiaryEntry?         @relation(fields: [diaryEntryId], references: [id])
+  financeTransaction FinanceTransaction? @relation(fields: [financeTransactionId], references: [id])
+
+  @@index([userId, date])
+  @@index([userCalendarId])
+  @@index([financeTransactionId])
+}
+
+// Privacy settings per user
+model UserPrivacySettings {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  zeroTrackingMode Boolean  @default(false)
+  diaryLockEnabled Boolean  @default(false)
+  diaryLockHash    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum SecurityFlagType {
+  MULTI_ACCOUNT_SUSPECTED
+  IP_REUSE_HIGH
+  DEVICE_REUSE_HIGH
+}
+
+model UserSecuritySignal {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastSeenIp        String?
+  lastSeenUserAgent String?
+  deviceHash        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([lastSeenIp])
+  @@index([deviceHash])
+}
+
+model SecurityFlag {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        SecurityFlagType
+  severity    Int             @default(1)
+  reason      String
+  metadata    Json?
+  resolvedAt  DateTime?
+  createdAt   DateTime        @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// After updating this model, run: npx prisma migrate dev --name add_calendar_suggestions
+model CalendarSuggestion {
+  id            String   @id @default(cuid())
+  userId        String
+  title         String
+  description   String?
+  suggestedDate DateTime
+  sourceType    String // "goal" | "habit" | "system"
+  sourceId      String? // Goal or Habit ID
+  dismissed     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, suggestedDate])
+  @@index([sourceType, sourceId])
+}
+
+// After updating this model, run: npx prisma migrate dev --name add_finance_transactions
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+model FinanceTransaction {
+  id               String          @id @default(cuid())
+  userId           String
+  type             TransactionType
+  amount           Float
+  date             DateTime        @default(now())
+  category         String
+  description      String          @default("")
+  encryptedDetails String?
+  detailsPreview   String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  // Back relation to calendar events
+  calendarEvents CalendarEvent[]
+
+  User User @relation(fields: [userId], references: [id])
+
+  @@index([userId, date])
+}
+
+// After updating this model, run: npx prisma migrate dev --name add_goals
+enum GoalStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  ON_HOLD
+  ARCHIVED
+}
+
+enum GoalPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum CalendarType {
+  SYSTEM
+  CUSTOM
+}
+
+model Goal {
+  id          String       @id @default(cuid())
+  userId      String
+  title       String
+  description String       @default("")
+  category    String       @default("General")
+  status      GoalStatus   @default(NOT_STARTED)
+  priority    GoalPriority @default(MEDIUM)
+  progress    Int          @default(0)
+  startDate   DateTime?
+  targetDate  DateTime
+  completedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  User      User            @relation(fields: [userId], references: [id])
+  GoalStep  GoalStep[]
+  Milestone GoalMilestone[]
+
+  @@index([userId, status])
+  @@index([userId, targetDate])
+}
+
+model GoalStep {
+  id        String   @id @default(cuid())
+  goalId    String
+  title     String
+  done      Boolean  @default(false)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+}
+
+model GoalMilestone {
+  id          String    @id @default(cuid())
+  userId      String
+  goalId      String
+  title       String
+  description String?
+  dueDate     DateTime?
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, goalId])
+  @@index([userId, dueDate])
+}
+
+// After updating this model, run: npx prisma migrate dev --name add_lists
+model List {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String   @default("")
+  color       String   @default("#10b981")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items ListItem[]
+  User  User       @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model ListItem {
+  id        String    @id @default(cuid())
+  listId    String
+  userId    String
+  content   String
+  done      Boolean   @default(false)
+  order     Int       @default(0)
+  dueDate   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  list List @relation(fields: [listId], references: [id], onDelete: Cascade)
+  User User @relation(fields: [userId], references: [id])
+
+  @@index([listId])
+  @@index([userId])
+}
+
+// After updating this model, run: npx prisma migrate dev --name add_charity_allocation
+model CharityAllocation {
+  id            String   @id @default(cuid())
+  userId        String?
+  amount        Float
+  currency      String   @default("usd")
+  stripeEventId String   @unique
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// After updating this model, run: npx prisma migrate dev --name add_habits
+model Habit {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  frequency   String // "daily" | "weekly" | "custom"
+  daysOfWeek  String[] // e.g. ["monday","wednesday","friday"] for custom
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  completions HabitCompletion[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model HabitCompletion {
+  id        String   @id @default(cuid())
+  userId    String
+  habitId   String
+  date      DateTime // midnight-normalized date of completion
+  createdAt DateTime @default(now())
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId, date]) // cannot complete habit twice per day
+  @@index([userId, date])
+}
+
+// After updating this model, run: npx prisma migrate dev --name add_user_calendars
+model UserCalendar {
+  id        String       @id @default(cuid())
+  userId    String
+  name      String
+  color     String       @default("#6366F1")
+  type      CalendarType @default(CUSTOM)
+  slug      String?
+  isVisible Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  events CalendarEvent[]
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, slug])
+  @@index([userId])
 }

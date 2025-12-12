@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { clerkClient } from "@clerk/nextjs/server";
 import prisma from "@/lib/prisma";
+import { calculateRevenueSplit } from "@/lib/payments";
 
 export const runtime = "nodejs"; // important for raw body
 
@@ -69,47 +70,67 @@ export async function POST(req: NextRequest) {
 
         console.log(`User ${user.id} marked as Pro with customer ${customerId}`);
 
-        // Track referral commission if applicable
+        // Track referral commission and charity allocation using centralized revenue split
         try {
           const dbUser = await prisma.user.findUnique({
             where: { clerkId: user.id },
           });
 
-          if (dbUser?.referredBy) {
-            // Find the referral record
-            const referral = await prisma.referral.findFirst({
-              where: { referredUserId: user.id },
+          if (!dbUser) {
+            console.log("Database user not found, skipping revenue split");
+            break;
+          }
+
+          // Calculate revenue split (30% affiliate, 10% charity, 60% business)
+          const subscriptionAmount = session.amount_total || 0; // Amount in cents
+          const gross = subscriptionAmount / 100; // Convert to dollars
+
+          // Find referral record to determine if affiliate exists
+          const referral = await prisma.referral.findFirst({
+            where: { referredUserId: user.id },
+          });
+
+          const hasAffiliate = !!referral;
+          const split = calculateRevenueSplit(gross, hasAffiliate);
+
+          console.log(`Revenue split for ${gross}: affiliate=${split.affiliateAmount}, charity=${split.charityAmount}, business=${split.businessNet}`);
+
+          // If referral exists, create commission and mark as paying
+          if (referral) {
+            await prisma.referral.update({
+              where: { id: referral.id },
+              data: {
+                isPaying: true,
+                subscriptionId: session.subscription as string,
+              },
             });
 
-            if (referral) {
-              // Mark referral as paying
-              await prisma.referral.update({
-                where: { id: referral.id },
-                data: {
-                  isPaying: true,
-                  subscriptionId: session.subscription as string,
-                },
-              });
+            await prisma.commission.create({
+              data: {
+                userId: referral.userId,
+                referralId: referral.id,
+                amount: split.affiliateAmount,
+                currency: session.currency || "usd",
+                type: "subscription",
+                stripeEventId: event.id,
+                status: "approved",
+              },
+            });
 
-              // Calculate 30% commission on subscription amount
-              const subscriptionAmount = session.amount_total || 0; // Amount in cents
-              const commissionAmount = Math.floor(subscriptionAmount * 0.30); // 30% commission
-              
-              await prisma.commission.create({
-                data: {
-                  userId: referral.userId,
-                  referralId: referral.id,
-                  amount: commissionAmount,
-                  currency: "usd",
-                  type: "subscription",
-                  stripeEventId: event.id,
-                  status: "approved",
-                },
-              });
-
-              console.log(`Created commission for referrer ${referral.userId}`);
-            }
+            console.log(`Created commission of $${split.affiliateAmount} for referrer ${referral.userId}`);
           }
+
+          // Always create charity allocation (10% of gross)
+          await prisma.charityAllocation.create({
+            data: {
+              userId: dbUser.id,
+              amount: split.charityAmount,
+              currency: session.currency || "usd",
+              stripeEventId: event.id,
+            },
+          });
+
+          console.log(`Created charity allocation of $${split.charityAmount} for user ${dbUser.id}`);
         } catch (dbError) {
           console.error("Database operation failed:", dbError);
           // Don't fail the webhook if DB is not set up yet

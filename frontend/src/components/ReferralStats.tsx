@@ -61,10 +61,7 @@ export default function ReferralStats() {
   if (error) {
     return (
       <div className="bg-gray-50 rounded-lg p-6 text-center">
-        <p className="text-sm text-gray-600 mb-2">{error}</p>
-        <p className="text-xs text-gray-500">
-          Database not set up yet? Run: <code className="bg-gray-200 px-1">npx prisma migrate dev</code>
-        </p>
+        <p className="text-sm text-gray-600">No referral data yet. Once people subscribe through your link, your stats will appear here.</p>
       </div>
     );
   }

@@ -1,24 +1,33 @@
-import { NextResponse, NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: "2024-11-20.acacia",
+export const runtime = "nodejs"; // ensure we can read the raw body / use Stripe properly
+export const dynamic = "force-dynamic";
+
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+const priceId = process.env.STRIPE_PRICE_ID;
+
+if (!stripeSecretKey) {
+  throw new Error("Missing STRIPE_SECRET_KEY in environment");
+}
+if (!priceId) {
+  throw new Error("Missing STRIPE_PRICE_ID in environment");
+}
+
+const stripe = new Stripe(stripeSecretKey, {
+  apiVersion: "2024-06-20",
 });
 
 export async function POST(req: NextRequest) {
   try {
-    const priceId = process.env.STRIPE_PRICE_ID;
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.headers.get("origin") || "http://localhost:3000";
-
-    if (!priceId) {
-      return NextResponse.json(
-        { error: "Missing STRIPE_PRICE_ID env variable" },
-        { status: 500 }
-      );
-    }
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.headers.get("origin") || "";
+    const { affiliateCode, userId } = await req.json().catch(() => ({
+      affiliateCode: "",
+      userId: "",
+    }));
 
     const session = await stripe.checkout.sessions.create({
-      mode: "subscription", // change to "payment" if one-time
+      mode: "subscription",
       line_items: [
         {
           price: priceId,
@@ -27,13 +36,17 @@ export async function POST(req: NextRequest) {
       ],
       success_url: `${appUrl}/affiliate?checkout=success`,
       cancel_url: `${appUrl}/dashboard?checkout=cancel`,
+      metadata: {
+        affiliateCode: affiliateCode || "",
+        userId: userId || "",
+      },
     });
 
     return NextResponse.json({ url: session.url });
-  } catch (err: any) {
-    console.error("Stripe error:", err);
+  } catch (error: any) {
+    console.error("Error in create-checkout-session route:", error);
     return NextResponse.json(
-      { error: err.message || "Something went wrong" },
+      { error: "Unable to create checkout session" },
       { status: 500 }
     );
   }

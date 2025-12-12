@@ -27,7 +27,6 @@ export async function POST(req: NextRequest) {
         referredBy: referredBy || null,
       },
       create: {
-        id: userId,
         clerkId: userId,
         email: clerkUser.emailAddresses[0]?.emailAddress || "",
         affiliateCode,
@@ -42,19 +41,23 @@ export async function POST(req: NextRequest) {
       });
 
       if (referrer) {
-        await prisma.referral.upsert({
+        // Check if referral already exists
+        const existingReferral = await prisma.referral.findFirst({
           where: {
-            referredUserId: userId,
-          },
-          update: {
-            referredEmail: user.email,
-          },
-          create: {
             userId: referrer.id,
             referredUserId: userId,
-            referredEmail: user.email,
           },
         });
+
+        if (!existingReferral) {
+          await prisma.referral.create({
+            data: {
+              userId: referrer.id,
+              referredUserId: userId,
+              referredEmail: user.email,
+            },
+          });
+        }
       }
     }
 

@@ -13,15 +13,15 @@ export async function GET(req: NextRequest) {
     const user = await prisma.user.findUnique({
       where: { clerkId: userId },
       include: {
-        referrals: {
+        Referral: {
           include: {
-            commissions: true,
+            Commission: true,
           },
           orderBy: {
             createdAt: "desc",
           },
         },
-        commissions: {
+        Commission: {
           orderBy: {
             createdAt: "desc",
           },
@@ -36,16 +36,20 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Rename for cleaner usage
+    const referrals = user.Referral;
+    const commissions = user.Commission;
+
     // Calculate stats
-    const totalReferrals = user.referrals.length;
-    const payingReferrals = user.referrals.filter((r) => r.isPaying).length;
-    const totalEarnings = user.commissions
+    const totalReferrals = referrals.length;
+    const payingReferrals = referrals.filter((r) => r.isPaying).length;
+    const totalEarnings = commissions
       .filter((c) => c.status === "approved" || c.status === "paid")
       .reduce((sum, c) => sum + c.amount, 0);
-    const pendingEarnings = user.commissions
+    const pendingEarnings = commissions
       .filter((c) => c.status === "pending")
       .reduce((sum, c) => sum + c.amount, 0);
-    const paidEarnings = user.commissions
+    const paidEarnings = commissions
       .filter((c) => c.status === "paid")
       .reduce((sum, c) => sum + c.amount, 0);
 
@@ -57,8 +61,8 @@ export async function GET(req: NextRequest) {
         pendingEarnings,
         paidEarnings,
       },
-      referrals: user.referrals,
-      commissions: user.commissions,
+      referrals,
+      commissions,
     });
   } catch (error) {
     console.error("Get referral stats error:", error);

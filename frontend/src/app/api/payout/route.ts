@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import prisma from "@/lib/prisma";
+import type { Commission } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
     const user = await prisma.user.findUnique({
       where: { clerkId: userId },
       include: {
-        commissions: {
+        Commission: {
           where: {
             status: "approved",
             payoutId: null,
@@ -46,8 +47,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const availableBalance = user.commissions.reduce(
-      (sum, c) => sum + c.amount,
+    const commissions = user.Commission;
+    const availableBalance = commissions.reduce(
+      (sum: number, c: Commission) => sum + c.amount,
       0
     );
 
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Link commissions to this payout
-    const commissionsToLink = user.commissions.filter((c) => {
+    const commissionsToLink = commissions.filter((c: Commission) => {
       return c.amount <= amount;
     });
 
@@ -114,7 +116,7 @@ export async function GET(req: NextRequest) {
     const user = await prisma.user.findUnique({
       where: { clerkId: userId },
       include: {
-        payouts: {
+        Payout: {
           orderBy: {
             createdAt: "desc",
           },
@@ -129,7 +131,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ payouts: user.payouts });
+    return NextResponse.json({ payouts: user.Payout });
   } catch (error) {
     console.error("Get payouts error:", error);
     return NextResponse.json(

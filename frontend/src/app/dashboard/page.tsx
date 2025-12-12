@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
-import Link from "next/link";
 import SubscribeButton from "@/components/SubscribeButton";
+import DashboardTiles from "@/components/DashboardTiles";
+import GoalsSummary from "@/components/GoalsSummary";
 import { getCurrentBetterUUser } from "@/lib/currentBetterUUser";
 
 export default async function DashboardPage() {
@@ -11,88 +11,54 @@ export default async function DashboardPage() {
     redirect("/sign-in");
   }
 
-  const tiles = [
-    {
-      href: "/calendar",
-      title: "Calendar",
-      description: "See and plan your events, routines, and important dates."
-    },
-    {
-      href: "/lists",
-      title: "Lists",
-      description: "Shopping lists, todos, and reminders all in one place."
-    },
-    {
-      href: "/habits",
-      title: "Habits & Goals",
-      description: "Track your daily habits and long-term goals."
-    },
-    {
-      href: "/diary",
-      title: "Diary",
-      description: "Journal your thoughts, wins, and reflections."
-    },
-    {
-      href: "/financials",
-      title: "Financials",
-      description: "Track income, expenses, and your money habits."
-    },
-    {
-      href: "/affiliate",
-      title: "Affiliate",
-      description: "See your referrals, earnings, and impact."
-    },
-    {
-      href: "/settings",
-      title: "Settings",
-      description: "Manage your profile, preferences, and notifications."
-    }
-  ];
-
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="flex items-center justify-between px-6 py-4 border-b bg-white">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">BetterU</h1>
-          <p className="text-sm text-slate-500">
-            Better You, Better World.
-            {user.isPro && <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">PRO</span>}
+    <div className="p-4 md:p-6 max-w-6xl mx-auto">
+      {/* Header Section */}
+      <header className="mb-8">
+        <div className="mb-4">
+          <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
+            Welcome back
+            {user.isPro && (
+              <span className="ml-3 inline-flex items-center rounded-full bg-gradient-to-r from-emerald-50 to-green-50 px-3 py-1 text-sm font-medium text-emerald-700 border border-emerald-200">
+                ✨ PRO
+              </span>
+            )}
+          </h1>
+          <p className="mt-1 text-sm md:text-base text-slate-600">
+            Choose a tool to start working on your life systems.
           </p>
         </div>
-        <UserButton />
       </header>
 
-      <main className="px-6 py-8 max-w-6xl mx-auto">
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold mb-1">Dashboard</h2>
-          <p className="text-sm text-slate-600">
-            This is your home base. Tap a section below to start organizing your life.
-          </p>
-        </section>
+      {/* Goals Summary Widget */}
+      <section className="mb-6">
+        <GoalsSummary />
+      </section>
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {tiles.map(tile => (
-            <Link
-              key={tile.href}
-              href={tile.href}
-              className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow"
-            >
-              <h3 className="text-lg font-semibold mb-1">{tile.title}</h3>
-              <p className="text-sm text-slate-600">{tile.description}</p>
-            </Link>
-          ))}
-        </section>
+        {/* Dashboard Tiles */}
+        <DashboardTiles />
 
-        {!user.isPro && (
-          <div className="mb-8 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-200">
-            <h3 className="text-lg font-semibold mb-2">Upgrade to BetterU Pro</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Unlock unlimited features, advanced analytics, and priority support.
+      {/* Upgrade Card - Only shown if not Pro */}
+      {!user.isPro && (
+        <section className="mt-8">
+          <div className="rounded-2xl border bg-gradient-to-r from-indigo-50 via-white to-emerald-50 p-5 md:p-6 shadow-sm">
+            <h2 className="text-lg md:text-xl font-semibold text-slate-900">
+              Upgrade to BetterU Pro
+            </h2>
+            <p className="mt-1 text-sm text-slate-700">
+              Unlock unlimited features, advanced analytics, priority support, and more.
             </p>
-            <SubscribeButton />
+            <ul className="mt-3 space-y-1 text-sm text-slate-700">
+              <li>• Full access to diary, goals, finances, lists, and calendar systems</li>
+              <li>• Advanced insights and upcoming premium features</li>
+              <li>• Help fund our 10% charity commitment</li>
+            </ul>
+            <div className="mt-4">
+              <SubscribeButton />
+            </div>
           </div>
-        )}
-      </main>
+        </section>
+      )}
     </div>
   );
 }

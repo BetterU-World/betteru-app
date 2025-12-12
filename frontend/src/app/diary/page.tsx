@@ -8,6 +8,8 @@ import NewDiaryEntryDialog from "@/components/diary/NewDiaryEntryDialog";
 import { getDatesWithEntries, formatDateForAPI } from "@/lib/calendar-utils";
 import type { CalendarSuggestion } from "@prisma/client";
 import { encryptDiaryContent, decryptDiaryContent, EncryptedDiaryPayload } from "@/lib/crypto/diary";
+import { saveLocalEntry, getLocalEntries, deleteLocalEntry } from "@/lib/diary/localStore";
+import type { LocalDiaryEntryRecord } from "@/lib/diary/types";
 
 interface DiaryMedia {
   id: string;
@@ -25,6 +27,7 @@ interface DiaryEntry {
   createdAt: string;
   updatedAt: string;
   media?: DiaryMedia[];
+  isLocalOnly?: boolean;
 }
 
 export default function DiaryPage() {
@@ -35,6 +38,7 @@ export default function DiaryPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [localOnly, setLocalOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -79,7 +83,28 @@ export default function DiaryPage() {
       const data = await res.json();
       
       if (res.ok) {
-        setEntries(data.entries || []);
+        const cloudEntries: DiaryEntry[] = data.entries || [];
+        let localEntries: LocalDiaryEntryRecord[] = [];
+        try {
+          localEntries = await getLocalEntries();
+        } catch (e) {
+          // IndexedDB not available or failed: proceed with cloud only
+          localEntries = [];
+        }
+        const mappedLocal: DiaryEntry[] = localEntries.map((le) => ({
+          id: le.localId,
+          userId: "local",
+          date: le.date,
+          title: le.title + " (Local-only)",
+          content: "", // never store plaintext; content rendered after decrypt if needed
+          contentPreview: undefined,
+          createdAt: le.createdAt,
+          updatedAt: le.updatedAt,
+          media: [],
+          isLocalOnly: true,
+        }));
+        const merged = [...cloudEntries, ...mappedLocal].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setEntries(merged);
       } else {
         console.error("Failed to fetch entries:", data.error);
       }
@@ -163,62 +188,98 @@ export default function DiaryPage() {
 
     try {
       setLoading(true);
-      let payload: any = { title: title.trim(), date: new Date().toISOString() };
-      // If diary is locked, require PIN and encrypt client-side
-      if (locked) {
-        if (!/^[0-9]{4,6}$/.test(pin)) {
+      const nowIso = new Date().toISOString();
+      if (localOnly) {
+        if (selectedFiles.length > 0) {
+          alert("Attachments are not supported for local-only yet.");
+          setLoading(false);
+          return;
+        }
+        const needsPin = !locked;
+        if ((locked || needsPin) && !/^[0-9]{4,6}$/.test(pin)) {
           alert("Enter your 4–6 digit PIN to encrypt");
           setLoading(false);
           return;
         }
         const enc: EncryptedDiaryPayload = await encryptDiaryContent(pin, content.trim());
-        payload = {
-          ...payload,
+        const localRecord: LocalDiaryEntryRecord = {
+          localId: crypto.randomUUID(),
+          storageMode: "local",
+          title: title.trim(),
+          date: nowIso,
           contentCiphertext: enc.ciphertextB64,
           contentIv: enc.ivB64,
           contentSalt: enc.saltB64,
           contentAlg: enc.alg,
+          createdAt: nowIso,
+          updatedAt: nowIso,
         };
+        await saveLocalEntry(localRecord);
+        const viewEntry: DiaryEntry = {
+          id: localRecord.localId,
+          userId: "local",
+          date: localRecord.date,
+          title: localRecord.title + " (Local-only)",
+          content: "",
+          createdAt: localRecord.createdAt,
+          updatedAt: localRecord.updatedAt,
+          media: [],
+          isLocalOnly: true,
+        };
+        setEntries([viewEntry, ...entries]);
       } else {
-        // Legacy: store plaintext when lock disabled (server will avoid storing long-term if switched later)
-        payload = { ...payload, content: content.trim() };
-      }
-
-      // Create the diary entry
-      const res = await fetch("/api/diary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.error || "Failed to save entry");
-        return;
-      }
-
-      // If there are files, upload them
-      if (selectedFiles.length > 0) {
-        const formData = new FormData();
-        formData.append("entryId", data.entry.id);
-        selectedFiles.forEach(file => {
-          formData.append("files", file);
-        });
-
-        const uploadRes = await fetch("/api/upload/diary-media", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (uploadRes.ok) {
-          const uploadData = await uploadRes.json();
-          data.entry.media = uploadData.media;
+        let payload: any = { title: title.trim(), date: nowIso };
+        if (locked) {
+          if (!/^[0-9]{4,6}$/.test(pin)) {
+            alert("Enter your 4–6 digit PIN to encrypt");
+            setLoading(false);
+            return;
+          }
+          const enc: EncryptedDiaryPayload = await encryptDiaryContent(pin, content.trim());
+          payload = {
+            ...payload,
+            contentCiphertext: enc.ciphertextB64,
+            contentIv: enc.ivB64,
+            contentSalt: enc.saltB64,
+            contentAlg: enc.alg,
+          };
+        } else {
+          payload = { ...payload, content: content.trim() };
         }
-      }
 
-      // Add new entry to the top of the list (no plaintext in memory if locked)
-      setEntries([data.entry, ...entries]);
+        const res = await fetch("/api/diary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          alert(data.error || "Failed to save entry");
+          return;
+        }
+
+        if (selectedFiles.length > 0) {
+          const formData = new FormData();
+          formData.append("entryId", data.entry.id);
+          selectedFiles.forEach(file => {
+            formData.append("files", file);
+          });
+
+          const uploadRes = await fetch("/api/upload/diary-media", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (uploadRes.ok) {
+            const uploadData = await uploadRes.json();
+            data.entry.media = uploadData.media;
+          }
+        }
+
+        setEntries([data.entry, ...entries]);
+      }
       
       // Clear form
       setTitle("");
@@ -347,39 +408,110 @@ export default function DiaryPage() {
     setSelectedEntry(entry);
   };
 
-  const handleCreateEntry = async (entryData: { title: string; content: string; date: string }) => {
+  const promoteToCloud = async (localId: string) => {
     try {
-      let payload: any = { title: entryData.title, date: entryData.date };
+      if (!/^[0-9]{4,6}$/.test(pin)) {
+        alert("Enter your 4–6 digit PIN to promote");
+        return;
+      }
+      // Find the record in IDB
+      const locals = await getLocalEntries();
+      const record = locals.find((r) => r.localId === localId);
+      if (!record) return;
+      // Decrypt locally to plaintext
+      const payload: EncryptedDiaryPayload = {
+        ciphertextB64: record.contentCiphertext,
+        ivB64: record.contentIv,
+        saltB64: record.contentSalt,
+        alg: record.contentAlg,
+      };
+      const plaintext = await decryptDiaryContent(pin, payload);
+
+      // Build server payload depending on lock
+      let serverPayload: any = { title: record.title, date: record.date };
       if (locked) {
-        if (!/^[0-9]{4,6}$/.test(pin)) throw new Error("PIN required to encrypt");
-        const enc: EncryptedDiaryPayload = await encryptDiaryContent(pin, entryData.content);
-        payload = {
-          ...payload,
+        const enc = await encryptDiaryContent(pin, plaintext);
+        serverPayload = {
+          ...serverPayload,
           contentCiphertext: enc.ciphertextB64,
           contentIv: enc.ivB64,
           contentSalt: enc.saltB64,
           contentAlg: enc.alg,
         };
       } else {
-        payload = { ...payload, content: entryData.content };
+        serverPayload = { ...serverPayload, content: plaintext };
       }
 
       const res = await fetch("/api/diary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(serverPayload),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to promote entry");
+      }
+      await deleteLocalEntry(localId);
+      await fetchEntries();
+    } catch (e) {
+      console.error("Promote failed", e);
+      alert("Failed to promote entry to cloud");
+    }
+  };
 
-      if (res.ok) {
-        const data = await res.json();
-        // Refresh entries
+  const handleCreateEntry = async (entryData: { title: string; content: string; date: string; storageMode: "cloud" | "local" }) => {
+    try {
+      if (entryData.storageMode === "local") {
+        if (!/^[0-9]{4,6}$/.test(pin)) throw new Error("PIN required to encrypt");
+        const enc: EncryptedDiaryPayload = await encryptDiaryContent(pin, entryData.content);
+        const localRecord: LocalDiaryEntryRecord = {
+          localId: crypto.randomUUID(),
+          storageMode: "local",
+          title: entryData.title,
+          date: new Date(entryData.date).toISOString(),
+          contentCiphertext: enc.ciphertextB64,
+          contentIv: enc.ivB64,
+          contentSalt: enc.saltB64,
+          contentAlg: enc.alg,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await saveLocalEntry(localRecord);
         await fetchEntries();
-        // Select the newly created entry
         setSelectedDate(entryData.date);
         setShowNewEntryDialog(false);
         setNewEntryDate(undefined);
       } else {
-        throw new Error("Failed to create entry");
+        let payload: any = { title: entryData.title, date: entryData.date };
+        if (locked) {
+          if (!/^[0-9]{4,6}$/.test(pin)) throw new Error("PIN required to encrypt");
+          const enc: EncryptedDiaryPayload = await encryptDiaryContent(pin, entryData.content);
+          payload = {
+            ...payload,
+            contentCiphertext: enc.ciphertextB64,
+            contentIv: enc.ivB64,
+            contentSalt: enc.saltB64,
+            contentAlg: enc.alg,
+          };
+        } else {
+          payload = { ...payload, content: entryData.content };
+        }
+
+        const res = await fetch("/api/diary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          await fetchEntries();
+          setSelectedDate(entryData.date);
+          setShowNewEntryDialog(false);
+          setNewEntryDate(undefined);
+        } else {
+          throw new Error("Failed to create entry");
+        }
       }
     } catch (error) {
       console.error("Error creating entry:", error);
@@ -528,13 +660,25 @@ export default function DiaryPage() {
               </div>
             )}
 
-            <button
+            <div className="flex items-center justify-between">
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={localOnly}
+                  onChange={(e) => setLocalOnly(e.target.checked)}
+                  disabled={loading}
+                />
+                <span>Store locally only</span>
+              </label>
+
+              <button
               type="submit"
               disabled={loading}
               className="bg-indigo-600 text-white rounded-md px-4 py-2 font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "Saving..." : "Save Entry"}
-            </button>
+              </button>
+            </div>
           </form>
         </div>
 
@@ -594,6 +738,13 @@ export default function DiaryPage() {
                       {formatDate(entry.date)}
                     </span>
                   </div>
+                  {entry.isLocalOnly && (
+                    <div className="mb-2">
+                      <span className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 border border-yellow-200">
+                        Local-only
+                      </span>
+                    </div>
+                  )}
                   <p className="text-slate-700 whitespace-pre-wrap mb-3">
                     {entry.contentPreview ? entry.contentPreview : truncateContent(entry.content)}
                   </p>
@@ -627,6 +778,17 @@ export default function DiaryPage() {
                           </div>
                         )}
                       </div>
+                    </div>
+                  )}
+                  {entry.isLocalOnly && (
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); promoteToCloud(entry.id); }}
+                        className="text-sm px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-md border border-slate-200"
+                      >
+                        Promote to cloud
+                      </button>
                     </div>
                   )}
                 </div>

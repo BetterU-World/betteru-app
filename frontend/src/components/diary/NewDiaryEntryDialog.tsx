@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 interface NewDiaryEntryDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (entry: { title: string; content: string; date: string }) => Promise<void>;
+  onSave: (entry: { title: string; content: string; date: string; storageMode: "cloud" | "local" }) => Promise<void>;
   initialDate?: Date;
 }
 
@@ -26,6 +26,7 @@ export default function NewDiaryEntryDialog({
     initialDate ? initialDate.toISOString().split("T")[0] : new Date().toISOString().split("T")[0]
   );
   const [loading, setLoading] = useState(false);
+  const [localOnly, setLocalOnly] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +38,7 @@ export default function NewDiaryEntryDialog({
 
     try {
       setLoading(true);
-      await onSave({ title, content, date });
+      await onSave({ title, content, date, storageMode: localOnly ? "local" : "cloud" });
       
       // Reset form
       setTitle("");
@@ -56,6 +57,7 @@ export default function NewDiaryEntryDialog({
     setTitle("");
     setContent("");
     setDate(initialDate ? initialDate.toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
+    setLocalOnly(false);
     onClose();
   };
 
@@ -102,6 +104,20 @@ export default function NewDiaryEntryDialog({
                 className="resize-none"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={localOnly}
+                onChange={(e) => setLocalOnly(e.target.checked)}
+              />
+              <span>Store locally only</span>
+            </label>
+            {localOnly && (
+              <p className="text-xs text-slate-500">Local-only entries stay on this device, encrypted. No server write occurs.</p>
+            )}
           </div>
 
           <DialogFooter>

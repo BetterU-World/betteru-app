@@ -1,8 +1,8 @@
 import { getCurrentBetterUUser } from "@/lib/currentBetterUUser";
-import Header from "@/components/Header";
 import InitializeAffiliateButton from "@/components/InitializeAffiliateButton";
 import CopyButton from "@/components/CopyButton";
 import ReferralStats from "@/components/ReferralStats";
+import AffiliateHQClient from "@/components/affiliate/AffiliateHQClient";
 
 export default async function AffiliatePage() {
   const user = await getCurrentBetterUUser();
@@ -20,7 +20,6 @@ export default async function AffiliatePage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Header />
       <div className="p-8 space-y-6 max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold">Affiliate Dashboard</h1>
 
@@ -76,6 +75,9 @@ export default async function AffiliatePage() {
             </div>
           )}
         </div>
+
+        {/* Affiliate HQ / Resources */}
+        <AffiliateHQClient />
       </div>
     </div>
   );

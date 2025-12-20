@@ -36,6 +36,25 @@ export default function Sidebar() {
     setIsMobileOpen(false);
   }, [pathname]);
 
+  // Listen for global open/close events from Header (hamburger)
+  useEffect(() => {
+    const open = () => setIsMobileOpen(true);
+    const close = () => setIsMobileOpen(false);
+    window.addEventListener("betteru:openSidebar", open);
+    window.addEventListener("betteru:closeSidebar", close);
+    return () => {
+      window.removeEventListener("betteru:openSidebar", open);
+      window.removeEventListener("betteru:closeSidebar", close);
+    };
+  }, []);
+
+  // Prevent background scroll when drawer is open
+  useEffect(() => {
+    try {
+      document.body.style.overflow = isMobileOpen ? "hidden" : "";
+    } catch {}
+  }, [isMobileOpen]);
+
   const navGroups: NavGroup[] = [
     {
       label: "Core",
@@ -182,26 +201,6 @@ export default function Sidebar() {
         </div>
       )}
 
-      {/* Mobile menu toggle button - Exported for use in Header */}
-      <button
-        onClick={() => setIsMobileOpen(true)}
-        className="md:hidden fixed bottom-6 left-6 z-30 p-3 bg-slate-900 text-white rounded-full shadow-lg hover:bg-slate-800 transition-colors"
-        aria-label="Open sidebar"
-      >
-        <svg
-          className="w-6 h-6"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 6h16M4 12h16M4 18h16"
-          />
-        </svg>
-      </button>
     </>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Header from "@/components/Header";
+import { useSearchParams } from "next/navigation";
 import { HabitList } from "@/components/habits/HabitList";
 import { HabitForm, HabitFormData } from "@/components/habits/HabitForm";
 import { Button } from "@/components/ui/button";
@@ -22,10 +22,28 @@ export default function HabitsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
+  const [focusHabitId, setFocusHabitId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     fetchHabits();
   }, []);
+
+  useEffect(() => {
+    const focus = searchParams.get("focus");
+    if (focus) {
+      setFocusHabitId(focus);
+      // Scroll into view after a short delay to ensure render
+      setTimeout(() => {
+        const el = document.getElementById(focus);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          // Remove highlight after a few seconds
+          setTimeout(() => setFocusHabitId(null), 3000);
+        }
+      }, 300);
+    }
+  }, [searchParams]);
 
   const fetchHabits = async () => {
     try {
@@ -141,8 +159,6 @@ export default function HabitsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <Header />
-
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -179,6 +195,7 @@ export default function HabitsPage() {
             onToggleCompletion={handleToggleCompletion}
             onEdit={handleEditHabit}
             onDelete={handleDeleteHabit}
+            focusHabitId={focusHabitId ?? undefined}
           />
         )}
       </main>

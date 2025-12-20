@@ -6,6 +6,7 @@
  */
 
 import prisma from "@/lib/prisma";
+import { getHabitStreak } from "@/lib/habits/streaks";
 import { calculateGoalProgress, getNextMilestone } from "./progress";
 import type { GoalStatus, GoalPriority } from "@prisma/client";
 
@@ -78,11 +79,43 @@ export async function getActiveGoalsSummary(userId: string) {
       targetDate: goal.targetDate,
     }));
 
+  // Compute Top Habit Streaks (up to 3)
+  const habits = await prisma.habit.findMany({
+    where: { userId },
+    include: {
+      completions: {
+        orderBy: { date: "desc" },
+        take: 1,
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const habitStreaks = await Promise.all(
+    habits.map(async (h) => {
+      const currentStreakDays = await getHabitStreak(h.id);
+      const lastCompletedDate = h.completions?.[0]?.date ?? null;
+      return {
+        habitId: h.id,
+        title: h.title,
+        currentStreakDays,
+        bestStreakDays: currentStreakDays,
+        lastCompletedDate,
+      };
+    })
+  );
+
+  const topHabitStreaks = habitStreaks
+    .filter((h) => h.currentStreakDays > 0)
+    .sort((a, b) => b.currentStreakDays - a.currentStreakDays)
+    .slice(0, 3);
+
   return {
     countActiveGoals: goals.length,
     countCompletedGoals: completedGoals,
     nextUpcomingMilestone,
     topPriorityGoals,
+    topHabitStreaks,
   };
 }
 

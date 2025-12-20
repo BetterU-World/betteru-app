@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Header from "@/components/Header";
 import MonthView from "@/components/calendar/MonthView";
 import WeekView from "@/components/calendar/WeekView";
 import DayView from "@/components/calendar/DayView";
@@ -341,8 +340,6 @@ export default function CalendarPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <Header />
-      
       <main className="container mx-auto px-4 py-6">
         <div className="bg-white dark:bg-gray-900 rounded-lg shadow-lg overflow-hidden flex flex-col h-[calc(100vh-8rem)]">
           {/* Calendar header */}

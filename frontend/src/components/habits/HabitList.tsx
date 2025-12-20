@@ -19,6 +19,7 @@ interface HabitListProps {
   onToggleCompletion: (habitId: string, completed: boolean) => Promise<void>;
   onEdit: (habit: Habit) => void;
   onDelete: (habitId: string) => Promise<void>;
+  focusHabitId?: string;
 }
 
 export function HabitList({
@@ -26,6 +27,7 @@ export function HabitList({
   onToggleCompletion,
   onEdit,
   onDelete,
+  focusHabitId,
 }: HabitListProps) {
   const getFrequencyDisplay = (habit: Habit) => {
     if (habit.frequency === "daily") {
@@ -53,7 +55,12 @@ export function HabitList({
       {habits.map((habit) => (
         <div
           key={habit.id}
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow"
+          id={habit.id}
+          className={`bg-white dark:bg-gray-800 border rounded-lg p-4 hover:shadow-md transition-shadow ${
+            habit.id === focusHabitId
+              ? "border-indigo-400 ring-2 ring-indigo-200"
+              : "border-gray-200 dark:border-gray-700"
+          }`}
         >
           <div className="flex items-start gap-4">
             <div className="pt-1">

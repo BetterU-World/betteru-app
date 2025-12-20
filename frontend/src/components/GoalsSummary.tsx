@@ -25,6 +25,13 @@ interface GoalsSummaryData {
     targetDate: string;
     priority: string;
   }>;
+  topHabitStreaks?: Array<{
+    habitId: string;
+    title: string;
+    currentStreakDays: number;
+    bestStreakDays: number;
+    lastCompletedDate?: string | null;
+  }>;
 }
 
 export default function GoalsSummary() {
@@ -68,6 +75,15 @@ export default function GoalsSummary() {
       month: "short",
       day: "numeric",
     });
+  };
+
+  const formatDateOptional = (dateString?: string | null) => {
+    if (!dateString) return null;
+    try {
+      return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    } catch {
+      return null;
+    }
   };
 
   return (
@@ -150,6 +166,40 @@ export default function GoalsSummary() {
           </div>
         </div>
       )}
+
+      {/* Top streaks section */}
+      <div className="mt-3 bg-white/70 rounded-lg p-3">
+        <div className="text-xs font-medium text-slate-500 mb-2">TOP STREAKS</div>
+        {summary.topHabitStreaks && summary.topHabitStreaks.length > 0 ? (
+          <div className="space-y-2">
+            {summary.topHabitStreaks.map((h) => {
+              const maxVal = Math.max(h.bestStreakDays || h.currentStreakDays || 0, 10);
+              const pct = Math.min(100, Math.round(((h.currentStreakDays || 0) / maxVal) * 100));
+              const lastStr = formatDateOptional(h.lastCompletedDate);
+              return (
+                <a key={h.habitId} href={`/habits?focus=${h.habitId}`} className="block">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-medium text-slate-900 truncate">{h.title}</span>
+                      {h.currentStreakDays > 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-orange-100 text-orange-700">🔥 {h.currentStreakDays}</span>
+                      )}
+                    </div>
+                    {lastStr && (
+                      <span className="text-xs text-slate-500">Last: {lastStr}</span>
+                    )}
+                  </div>
+                  <div className="mt-1 h-1 bg-slate-200 rounded">
+                    <div className="h-1 bg-orange-400 rounded" style={{ width: `${pct}%` }}></div>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-sm text-slate-500">Complete a habit to start a streak.</div>
+        )}
+      </div>
     </div>
   );
 }

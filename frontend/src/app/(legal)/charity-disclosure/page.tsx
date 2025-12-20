@@ -1,10 +1,8 @@
 import { SUPPORT_EMAIL } from "@/lib/constants";
-import Header from "@/components/Header";
 
 export default function CharityDisclosurePage() {
   return (
     <>
-      <Header />
       <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-6 md:p-8">
         <article className="prose prose-gray max-w-none">

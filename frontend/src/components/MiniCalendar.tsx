@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 interface MiniCalendarProps {
   datesWithEntries: Set<string>;
   datesWithSuggestions?: Set<string>;
+  datesWithDailyState?: Set<string>;
   selectedDate?: string | null;
   onDateClick: (date: Date) => void;
   initialMonth?: Date;
@@ -16,6 +17,7 @@ interface MiniCalendarProps {
 export default function MiniCalendar({
   datesWithEntries,
   datesWithSuggestions = new Set(),
+  datesWithDailyState = new Set(),
   selectedDate,
   onDateClick,
   initialMonth,
@@ -89,6 +91,7 @@ export default function MiniCalendar({
           const dateKey = formatDateForAPI(date);
           const hasEntry = datesWithEntries.has(dateKey);
           const hasSuggestion = datesWithSuggestions.has(dateKey);
+          const hasDailyState = datesWithDailyState.has(dateKey);
           const isCurrentMonth = date.getMonth() === currentDate.getMonth();
           const isTodayDate = isToday(date);
           const isSelected = selectedDate === dateKey;
@@ -124,6 +127,9 @@ export default function MiniCalendar({
               {hasSuggestion && (
                 <span className="absolute bottom-0.5 left-1/2 translate-x-0.5 w-1.5 h-1.5 bg-blue-400 rounded-full shadow-sm" />
               )}
+              {hasDailyState && (
+                <span className="absolute bottom-0.5 right-1 w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-sm" />
+              )}
             </button>
           );
         })}
@@ -139,6 +145,10 @@ export default function MiniCalendar({
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 bg-blue-400 rounded-full" />
             <span>Suggestions</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+            <span>Logged</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-5 h-5 bg-blue-100 dark:bg-blue-900/50 rounded border border-blue-400" />

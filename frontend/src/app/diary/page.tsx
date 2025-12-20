@@ -10,6 +10,7 @@ import type { CalendarSuggestion } from "@prisma/client";
 import { encryptDiaryContent, decryptDiaryContent, EncryptedDiaryPayload } from "@/lib/crypto/diary";
 import { saveLocalEntry, getLocalEntries, deleteLocalEntry } from "@/lib/diary/localStore";
 import type { LocalDiaryEntryRecord } from "@/lib/diary/types";
+import FirstTimeTipCard, { ONBOARDING_KEY } from "@/components/onboarding/FirstTimeTipCard";
 
 interface DiaryMedia {
   id: string;
@@ -31,6 +32,15 @@ interface DiaryEntry {
 }
 
 export default function DiaryPage() {
+  // Daily State (local-only UI persistence)
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const [dailyMood, setDailyMood] = useState<number>(5);
+  const [dailyEnergy, setDailyEnergy] = useState<number>(5);
+  const [dailyStress, setDailyStress] = useState<number>(5);
+  const [sleepHours, setSleepHours] = useState<number>(7);
+  const [dailyLog, setDailyLog] = useState<Array<{ dayKey: string; mood: number; energy: number; stress: number; sleep: number }>>([]);
+  const [loggedToday, setLoggedToday] = useState<boolean>(false);
+  const [loggedDates, setLoggedDates] = useState<Set<string>>(new Set());
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [locked, setLocked] = useState<boolean | null>(null);
   const [pin, setPin] = useState("");
@@ -47,6 +57,13 @@ export default function DiaryPage() {
   const [showNewEntryDialog, setShowNewEntryDialog] = useState(false);
   const [newEntryDate, setNewEntryDate] = useState<Date | undefined>(undefined);
   const [suggestions, setSuggestions] = useState<CalendarSuggestion[]>([]);
+  // Assist state (client-only)
+  const [assistLoading, setAssistLoading] = useState(false);
+  const [assistError, setAssistError] = useState<string | null>(null);
+  const [assistResponse, setAssistResponse] = useState<string>("");
+  const [assistMode, setAssistMode] = useState<"reflect" | "suggest">("reflect");
+  const [onboardingDismissed, setOnboardingDismissed] = useState<boolean>(false);
+  const STARTER_PROMPT = "Right now I’m feeling… because… Today would feel like a win if…";
   const entriesRef = useRef<HTMLDivElement>(null);
   const entryRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -55,7 +72,60 @@ export default function DiaryPage() {
   useEffect(() => {
     checkLockAndFetch();
     fetchSuggestions();
+    // Load Daily State
+    try {
+      const ob = localStorage.getItem(ONBOARDING_KEY);
+      setOnboardingDismissed(ob === "1");
+      const raw = localStorage.getItem(`dailyState:${todayKey}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.mood === "number") setDailyMood(parsed.mood);
+        if (typeof parsed.energy === "number") setDailyEnergy(parsed.energy);
+        if (typeof parsed.stress === "number") setDailyStress(parsed.stress);
+        if (typeof parsed.sleep === "number") setSleepHours(parsed.sleep);
+        setLoggedToday(true);
+      }
+      const rawLog = localStorage.getItem("dailyState:log");
+      if (rawLog) {
+        const list = JSON.parse(rawLog);
+        if (Array.isArray(list)) setDailyLog(list);
+      }
+      // Build logged dates set from localStorage keys
+      const set = new Set<string>();
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (key.startsWith("dailyState:")) {
+          const day = key.substring("dailyState:".length);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(day)) set.add(day);
+        }
+      }
+      setLoggedDates(set);
+    } catch {}
   }, []);
+
+  const handleLogDailyState = () => {
+    try {
+      if (loggedToday) return;
+      const rec = { mood: dailyMood, energy: dailyEnergy, stress: dailyStress, sleep: sleepHours };
+      localStorage.setItem(`dailyState:${todayKey}`, JSON.stringify(rec));
+      setDailyLog((prev) => {
+        const next = [...prev];
+        const idx = next.findIndex((r) => r.dayKey === todayKey);
+        if (idx >= 0) next[idx] = { dayKey: todayKey, ...rec };
+        else next.unshift({ dayKey: todayKey, ...rec });
+        const trimmed = next.slice(0, 14);
+        localStorage.setItem("dailyState:log", JSON.stringify(trimmed));
+        return trimmed;
+      });
+      setLoggedToday(true);
+      setLoggedDates((prev) => {
+        const next = new Set(prev);
+        next.add(todayKey);
+        return next;
+      });
+    } catch {}
+  };
 
   async function checkLockAndFetch() {
     try {
@@ -294,6 +364,47 @@ export default function DiaryPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAssist = async (mode: "reflect" | "suggest") => {
+    const draft = content.trim();
+    if (draft.length < 40) {
+      setAssistError("Write a couple sentences first — then I can help.");
+      return;
+    }
+    setAssistError(null);
+    setAssistResponse("");
+    setAssistMode(mode);
+    setAssistLoading(true);
+    try {
+      const res = await fetch("/api/assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, draft }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAssistError(data.error || "Something went wrong. Please try again.");
+      } else {
+        setAssistResponse(
+          data.text || "Coming soon — Assist will help you reflect and choose your next intentional step."
+        );
+      }
+    } catch (e) {
+      setAssistError("Network issue. Please try again.");
+    } finally {
+      setAssistLoading(false);
+    }
+  };
+
+  const insertAssistResponse = () => {
+    if (!assistResponse) return;
+    setContent((prev) => (prev ? prev + "\n\n" + assistResponse : assistResponse));
+  };
+
+  const copyAssistResponse = async () => {
+    if (!assistResponse) return;
+    try { await navigator.clipboard.writeText(assistResponse); } catch {}
   };
 
   const formatDate = (dateString: string) => {
@@ -563,6 +674,12 @@ export default function DiaryPage() {
         {/* New Entry Form */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
           <h2 className="text-lg font-semibold mb-4">New Entry</h2>
+          {!onboardingDismissed && (
+            <FirstTimeTipCard
+              onTryPrompt={() => setContent((prev) => (prev ? prev + "\n\n" + STARTER_PROMPT : STARTER_PROMPT))}
+              onDismiss={() => { try { localStorage.setItem(ONBOARDING_KEY, "1"); } catch {}; setOnboardingDismissed(true); }}
+            />
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label
@@ -598,6 +715,60 @@ export default function DiaryPage() {
                 className="w-full border border-slate-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                 disabled={loading}
               />
+
+              {!onboardingDismissed && (
+                <p className="mt-2 text-xs text-slate-500">Tip: You don’t need to write a lot — 3 sentences is enough.</p>
+              )}
+
+              {/* BetterU Assist controls */}
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-slate-500">Use your current entry draft to get guidance.</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleAssist("reflect")}
+                    disabled={assistLoading || loading}
+                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition disabled:opacity-50"
+                  >
+                    {assistLoading && assistMode === "reflect" ? "Reflecting..." : "Reflect"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAssist("suggest")}
+                    disabled={assistLoading || loading}
+                    className="px-3 py-1.5 bg-slate-100 text-slate-900 rounded-md hover:bg-slate-200 border border-slate-200 transition disabled:opacity-50"
+                  >
+                    {assistLoading && assistMode === "suggest" ? "Suggesting..." : "Suggest"}
+                  </button>
+                </div>
+                {assistError && (
+                  <div className="text-sm text-red-600">{assistError}</div>
+                )}
+                {assistResponse && (
+                  <div className="mt-1 p-3 bg-slate-50 border border-slate-200 rounded-md text-slate-800 whitespace-pre-wrap">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-slate-700">Assist Response</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={insertAssistResponse}
+                          className="text-xs px-2 py-1 bg-indigo-50 text-indigo-700 rounded border border-indigo-200 hover:bg-indigo-100"
+                        >
+                          Insert into entry
+                        </button>
+                        <button
+                          type="button"
+                          onClick={copyAssistResponse}
+                          className="text-xs px-2 py-1 bg-slate-100 text-slate-900 rounded border border-slate-200 hover:bg-slate-200"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                    {assistResponse}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* File Upload */}
@@ -682,10 +853,100 @@ export default function DiaryPage() {
           </form>
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Calendar + Daily State (top row) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Calendar */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Calendar</h2>
+              <button
+                onClick={() => {
+                  setNewEntryDate(new Date());
+                  setShowNewEntryDialog(true);
+                }}
+                className="text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition"
+              >
+                + New
+              </button>
+            </div>
+            <MiniCalendar
+              datesWithEntries={getDatesWithEntries(entries.map(e => ({ ...e, date: e.date })))}
+              datesWithSuggestions={new Set(suggestions.map(s => formatDateForAPI(new Date(s.suggestedDate))))}
+              datesWithDailyState={loggedDates}
+              selectedDate={selectedDate}
+              onDateClick={(date) => {
+                handleDateClick(date);
+              }}
+            />
+          </div>
+
+          {/* Daily State Log */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
+            {!onboardingDismissed && (
+              <p className="text-xs text-slate-500 mb-2">Log your day in 10 seconds (optional).</p>
+            )}
+            <h2 className="text-lg font-semibold mb-4">Daily State</h2>
+            <div className="space-y-5">
+              <div>
+                <div className="flex justify-between text-sm mb-1"><span>Mood</span><span className="font-medium">{dailyMood}</span></div>
+                <input type="range" min={0} max={10} value={dailyMood} onChange={(e) => setDailyMood(parseInt(e.target.value))} className="w-full disabled:opacity-60" disabled={loggedToday} />
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-1"><span>Energy</span><span className="font-medium">{dailyEnergy}</span></div>
+                <input type="range" min={0} max={10} value={dailyEnergy} onChange={(e) => setDailyEnergy(parseInt(e.target.value))} className="w-full disabled:opacity-60" disabled={loggedToday} />
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-1"><span>Stress</span><span className="font-medium">{dailyStress}</span></div>
+                <input type="range" min={0} max={10} value={dailyStress} onChange={(e) => setDailyStress(parseInt(e.target.value))} className="w-full disabled:opacity-60" disabled={loggedToday} />
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-1"><span>Sleep (hrs)</span><span className="font-medium">{sleepHours}</span></div>
+                <input type="range" min={0} max={12} value={sleepHours} onChange={(e) => setSleepHours(parseInt(e.target.value))} className="w-full disabled:opacity-60" disabled={loggedToday} />
+              </div>
+
+              {/* Log Button */}
+              <div className="pt-1">
+                {!loggedToday ? (
+                  <button
+                    onClick={handleLogDailyState}
+                    className="w-full inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm transition"
+                  >
+                    Log Daily State
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    className="w-full inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-slate-400 cursor-not-allowed rounded-md"
+                  >
+                    Logged for today
+                  </button>
+                )}
+              </div>
+
+              {/* Log */}
+              <div className="pt-2">
+                <h3 className="text-sm font-semibold text-slate-700 mb-2">Recent Days</h3>
+                {dailyLog.length === 0 ? (
+                  <p className="text-sm text-slate-500">No history yet.</p>
+                ) : (
+                  <ul className="divide-y divide-slate-200">
+                    {dailyLog.slice(0,7).map((r) => (
+                      <li key={r.dayKey} className="py-2 text-sm flex items-center justify-between">
+                        <span className="text-slate-600">{r.dayKey}</span>
+                        <span className="text-slate-900 font-medium">M{r.mood} · E{r.energy} · S{r.stress} · {r.sleep}h</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="grid grid-cols-1 gap-6">
           {/* Entries List - Left Column (2/3 width on large screens) */}
-          <div className="lg:col-span-2" ref={entriesRef}>
+          <div ref={entriesRef}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Your Entries</h2>
             {selectedDate && (
@@ -797,67 +1058,7 @@ export default function DiaryPage() {
           )}
           </div>
 
-          {/* Mini Calendar Section - Right Column (1/3 width on large screens) */}
-          {!fetching && (
-            <div className="lg:col-span-1">
-              <div className="lg:sticky lg:top-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold">Quick Navigation</h2>
-                  <button
-                    onClick={() => {
-                      setNewEntryDate(new Date());
-                      setShowNewEntryDialog(true);
-                    }}
-                    className="text-sm px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition"
-                  >
-                    + New
-                  </button>
-                </div>
-                <MiniCalendar
-                  datesWithEntries={getDatesWithEntries(entries.map(e => ({ ...e, date: e.date })))}
-                  datesWithSuggestions={new Set(suggestions.map(s => formatDateForAPI(new Date(s.suggestedDate))))}
-                  selectedDate={selectedDate}
-                  onDateClick={(date) => {
-                    handleDateClick(date);
-                  }}
-                />
-                
-                {/* Quick Stats */}
-                <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                  <h3 className="text-sm font-semibold mb-3 text-gray-700 dark:text-gray-300">
-                    Stats
-                  </h3>
-                  <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                    <div className="flex justify-between">
-                      <span>Total Entries:</span>
-                      <span className="font-semibold text-gray-900 dark:text-gray-100">
-                        {entries.length}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>This Month:</span>
-                      <span className="font-semibold text-gray-900 dark:text-gray-100">
-                        {entries.filter(e => {
-                          const entryDate = new Date(e.date);
-                          const now = new Date();
-                          return entryDate.getMonth() === now.getMonth() &&
-                                 entryDate.getFullYear() === now.getFullYear();
-                        }).length}
-                      </span>
-                    </div>
-                    {selectedDate && (
-                      <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
-                        <span>Selected Date:</span>
-                        <span className="font-semibold text-purple-600 dark:text-purple-400">
-                          {displayedEntries.length}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Right column removed: Calendar is now shown above alongside Daily State */}
         </div>
       </div>
 

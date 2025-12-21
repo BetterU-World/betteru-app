@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireDbUser } from "@/lib/auth/requireUser";
+import { getOrCreateSystemCalendar } from "@/lib/calendars/defaults";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,7 +12,6 @@ export async function GET(request: NextRequest) {
     const month = searchParams.get("month");
     const year = searchParams.get("year");
     const date = searchParams.get("date");
-    const includeGoals = searchParams.get("includeGoals") === "true";
 
     let whereClause: any = { userId: user.id };
     let milestoneWhereClause: any = { userId: user.id };
@@ -70,50 +70,51 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Optionally include goal milestones as virtual events
-    let goalMilestones: any[] = [];
-    if (includeGoals) {
-      const milestones = await prisma.goalMilestone.findMany({
-        where: milestoneWhereClause,
-        include: {
-          goal: {
-            select: {
-              id: true,
-              title: true,
-              category: true,
-              priority: true,
-            },
+    // Include goal milestones as virtual events under the Goals system calendar
+    const goalsCalendar = await getOrCreateSystemCalendar(user.id, "goals");
+    const milestones = await prisma.goalMilestone.findMany({
+      where: milestoneWhereClause,
+      include: {
+        goal: {
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            priority: true,
           },
         },
-        orderBy: {
-          dueDate: "asc",
-        },
-      });
+      },
+      orderBy: {
+        dueDate: "asc",
+      },
+    });
 
-      // Transform milestones into event-like objects
-      goalMilestones = milestones
-        .filter(m => m.dueDate)
-        .map((m) => ({
-          id: `goal-milestone-${m.id}`,
-          title: `🎯 ${m.goal.title}: ${m.title}`,
-          description: m.description || m.goal.title,
-          date: m.dueDate,
-          isAllDay: true,
-          type: "goal-milestone",
-          metadata: {
-            goalId: m.goal.id,
-            milestoneId: m.id,
-            completed: m.completed,
-            priority: m.goal.priority,
-            category: m.goal.category,
-          },
-          userCalendar: {
-            id: "goals",
-            name: "Goals",
-            color: "#10b981", // Green color for goals
-          },
-        }));
-    }
+    const goalMilestones = milestones
+      .filter((m) => m.dueDate)
+      .map((m) => ({
+        id: `milestone_${m.id}`,
+        title: `${m.goal.title}: ${m.title}`,
+        description: m.description || m.goal.title || "Goal milestone",
+        date: m.dueDate,
+        startTime: null,
+        endTime: null,
+        allDay: true,
+        type: "goal_milestone",
+        href: "/goals",
+        userCalendarId: goalsCalendar.id,
+        userCalendar: {
+          id: goalsCalendar.id,
+          name: goalsCalendar.name,
+          color: goalsCalendar.color,
+        },
+        metadata: {
+          goalId: m.goal.id,
+          milestoneId: m.id,
+          completed: m.completed,
+          priority: m.goal.priority,
+          category: m.goal.category,
+        },
+      }));
 
     return NextResponse.json({ events: [...events, ...goalMilestones] }, { status: 200 });
   } catch (error) {

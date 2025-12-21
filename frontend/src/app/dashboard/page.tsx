@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import SubscribeButton from "@/components/SubscribeButton";
 import DashboardTiles from "@/components/DashboardTiles";
 import GoalsSummary from "@/components/GoalsSummary";
 import { getCurrentBetterUUser } from "@/lib/currentBetterUUser";
@@ -38,27 +37,7 @@ export default async function DashboardPage() {
         {/* Dashboard Tiles */}
         <DashboardTiles />
 
-      {/* Upgrade Card - Only shown if not Pro */}
-      {!user.isPro && (
-        <section className="mt-8">
-          <div className="rounded-2xl border bg-gradient-to-r from-indigo-50 via-white to-emerald-50 p-5 md:p-6 shadow-sm">
-            <h2 className="text-lg md:text-xl font-semibold text-slate-900">
-              Upgrade to BetterU Pro
-            </h2>
-            <p className="mt-1 text-sm text-slate-700">
-              Unlock unlimited features, advanced analytics, priority support, and more.
-            </p>
-            <ul className="mt-3 space-y-1 text-sm text-slate-700">
-              <li>• Full access to diary, goals, finances, lists, and calendar systems</li>
-              <li>• Advanced insights and upcoming premium features</li>
-              <li>• Help fund our 10% charity commitment</li>
-            </ul>
-            <div className="mt-4">
-              <SubscribeButton />
-            </div>
-          </div>
-        </section>
-      )}
+      {/* Upgrade CTA removed per request; spacing remains clean with tiles above */}
     </div>
   );
 }

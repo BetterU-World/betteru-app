@@ -1,6 +1,8 @@
 import Header from "@/components/Header";
 import ManageBillingButton from "@/components/ManageBillingButton";
 import LegalEligibilitySection from "@/components/settings/LegalEligibilitySection";
+import SettingsAccountClient from "@/components/settings/SettingsAccountClient";
+import SettingsPreferencesClient from "@/components/settings/SettingsPreferencesClient";
 import prisma from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 
@@ -27,15 +29,8 @@ export default async function SettingsPage() {
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 space-y-3">
           <h2 className="font-semibold text-lg">Account</h2>
-          <p className="text-sm text-slate-600 mb-3">
-            Manage your account and sign out.
-          </p>
-          <a
-            href="/sign-out"
-            className="inline-block px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium"
-          >
-            Sign Out
-          </a>
+          <p className="text-sm text-slate-600 mb-3">Read-only account details for now.</p>
+          <SettingsAccountClient />
         </div>
 
         {user && (
@@ -51,11 +46,11 @@ export default async function SettingsPage() {
           />
         )}
 
+        <SettingsPreferencesClient />
+
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
           <h2 className="font-semibold text-lg mb-2">More Settings</h2>
-          <p className="text-sm text-slate-600">
-            Additional settings coming soon: profile, preferences, notifications, etc.
-          </p>
+          <p className="text-sm text-slate-600">Additional settings coming soon.</p>
         </div>
       </div>
     </div>

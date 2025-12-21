@@ -4,14 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { useState, useEffect } from "react";
+import { isAdminEmail } from "@/lib/isAdmin";
 
 function useIsAdmin() {
   const { user } = useUser();
   if (!user) return false;
-  const meta = user.publicMetadata || {};
-  if (meta.role === "admin") return true;
-  if (meta.isAdmin === true) return true;
-  return false;
+  const email = user.emailAddresses?.[0]?.emailAddress || "";
+  return isAdminEmail(email);
 }
 
 type NavItem = {

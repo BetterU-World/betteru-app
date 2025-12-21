@@ -27,7 +27,6 @@ export default function CalendarPage() {
   const [userCalendars, setUserCalendars] = useState<Array<{ id: string; name: string; color: string; type: string; slug: string | null; isVisible: boolean; eventCount: number }>>([]);
   const [userCalendarToggles, setUserCalendarToggles] = useState<Record<string, boolean>>({});
   const [showLayersPanel, setShowLayersPanel] = useState(false);
-  const [showGoals, setShowGoals] = useState(true);
 
   // Fetch events for the current month/week/day
   useEffect(() => {
@@ -37,10 +36,7 @@ export default function CalendarPage() {
     fetchUserCalendars();
   }, [currentDate, currentView]);
 
-  // Refetch events when goals toggle changes
-  useEffect(() => {
-    fetchEvents();
-  }, [showGoals]);
+  // No separate milestones toggle; milestones are part of Goals system calendar
 
   const fetchUserCalendars = async () => {
     try {
@@ -70,7 +66,6 @@ export default function CalendarPage() {
       const params = new URLSearchParams({
         month: month.toString(),
         year: year.toString(),
-        includeGoals: showGoals.toString(),
       });
       
       const res = await fetch(`/api/calendar-events?${params}`);
@@ -204,6 +199,10 @@ export default function CalendarPage() {
   };
 
   const handleEventClick = (event: CalendarEvent) => {
+    if ((event as any).type === "goal_milestone") {
+      // Milestones are read-only in the calendar; do not open editor
+      return;
+    }
     setEditingEvent(event);
     setShowEventDialog(true);
   };
@@ -338,6 +337,36 @@ export default function CalendarPage() {
     }
   };
 
+  const handleToggleAllCalendars = async () => {
+    if (!userCalendars || userCalendars.length === 0) return;
+    const areAllVisible = userCalendars.every((cal) => userCalendarToggles[cal.id] !== false);
+    const newVisibility = !areAllVisible;
+
+    // Optimistically update all toggles locally
+    setUserCalendarToggles((prev) => {
+      const next: Record<string, boolean> = { ...prev };
+      userCalendars.forEach((cal) => {
+        next[cal.id] = newVisibility;
+      });
+      return next;
+    });
+
+    // Persist visibility for each calendar
+    try {
+      await Promise.allSettled(
+        userCalendars.map((cal) =>
+          fetch(`/api/user-calendars/${cal.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ isVisible: newVisibility }),
+          })
+        )
+      );
+    } catch (error) {
+      console.error("Error toggling all calendars:", error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <main className="container mx-auto px-4 py-6">
@@ -416,40 +445,28 @@ export default function CalendarPage() {
           {/* Calendar Layers Panel */}
           {showLayersPanel && (userCalendars.length > 0 || true) && (
             <div className="p-4 border-b bg-gray-50 dark:bg-gray-800">
-              {/* Goals Layer */}
-              <div className="mb-4">
-                <h3 className="font-semibold text-sm mb-2">Goal Milestones</h3>
-                <div
-                  className="flex items-center gap-2 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-                  onClick={() => setShowGoals(!showGoals)}
-                >
-                  <input
-                    type="checkbox"
-                    checked={showGoals}
-                    onChange={() => setShowGoals(!showGoals)}
-                    className="w-4 h-4 rounded"
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  <div
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: "#10b981" }}
-                  />
-                  <span className="text-sm truncate flex-1">Goals</span>
-                </div>
-              </div>
-
               {/* User Calendars */}
               {userCalendars.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold text-sm">My Calendars</h3>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => window.location.href = "/calendars"}
-                    >
-                      Manage
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleToggleAllCalendars}
+                        title="Toggle visibility of all calendars"
+                      >
+                        Toggle All
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => (window.location.href = "/calendars")}
+                      >
+                        Manage
+                      </Button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                     {userCalendars.map((calendar) => (

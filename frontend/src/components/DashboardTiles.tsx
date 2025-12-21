@@ -2,15 +2,13 @@
 
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
+import { isAdminEmail } from "@/lib/isAdmin";
 
 function useIsAdmin() {
   const { user } = useUser();
   if (!user) return false;
-  const meta = user.publicMetadata || {};
-  // Support either role or isAdmin flag
-  if (meta.role === "admin") return true;
-  if (meta.isAdmin === true) return true;
-  return false;
+  const email = user.emailAddresses?.[0]?.emailAddress || "";
+  return isAdminEmail(email);
 }
 
 type DashboardTileProps = {

@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import prisma from "@/lib/prisma";
 import { getPrismaUserIdFromClerk } from "@/lib/user-helpers";
-import { GoalStatus } from "@prisma/client";
 import type { Goal } from "@prisma/client";
+const NOT_STARTED: Goal["status"] = "NOT_STARTED";
+const IN_PROGRESS: Goal["status"] = "IN_PROGRESS";
+const COMPLETED: Goal["status"] = "COMPLETED";
+const ARCHIVED: Goal["status"] = "ARCHIVED";
 type GoalPriority = "LOW" | "MEDIUM" | "HIGH";
 
 // GET /api/goals - List goals with optional filters
@@ -74,10 +77,10 @@ export async function GET(request: Request) {
     const summary = {
       total: allGoals.length,
       active: allGoals.filter(
-        (g) => g.status === GoalStatus.NOT_STARTED || g.status === GoalStatus.IN_PROGRESS
+        (g) => g.status === NOT_STARTED || g.status === IN_PROGRESS
       ).length,
-      inProgress: allGoals.filter((g) => g.status === GoalStatus.IN_PROGRESS).length,
-      completed: allGoals.filter((g) => g.status === GoalStatus.COMPLETED).length,
+      inProgress: allGoals.filter((g) => g.status === IN_PROGRESS).length,
+      completed: allGoals.filter((g) => g.status === COMPLETED).length,
     };
 
     return NextResponse.json({ goals, summary });
@@ -140,7 +143,7 @@ export async function POST(request: Request) {
         description: description || "",
         category: category || "General",
         priority: priority || "MEDIUM",
-        status: status || GoalStatus.NOT_STARTED,
+        status: status || NOT_STARTED,
         progress: progress || 0,
         startDate: startDate ? new Date(startDate) : null,
         targetDate: new Date(targetDate),
@@ -261,11 +264,11 @@ export async function PATCH(request: Request) {
     if (status) {
       updateData.status = status as Goal["status"];
       // Set completedAt when marking as completed
-      if (status === GoalStatus.COMPLETED && existingGoal.status !== GoalStatus.COMPLETED) {
+      if (status === COMPLETED && existingGoal.status !== COMPLETED) {
         updateData.completedAt = new Date();
       }
       // Clear completedAt when moving away from completed
-      if (status !== GoalStatus.COMPLETED && existingGoal.status === GoalStatus.COMPLETED) {
+      if (status !== COMPLETED && existingGoal.status === COMPLETED) {
         updateData.completedAt = null;
       }
     }
@@ -331,7 +334,7 @@ export async function DELETE(request: Request) {
       // Soft delete by archiving
       await prisma.goal.update({
         where: { id },
-        data: { status: GoalStatus.ARCHIVED },
+        data: { status: ARCHIVED },
       });
     } else {
       // Hard delete (GoalSteps will be cascade deleted)

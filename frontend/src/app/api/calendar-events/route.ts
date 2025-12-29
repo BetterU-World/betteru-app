@@ -88,10 +88,11 @@ export async function GET(request: NextRequest) {
         dueDate: "asc",
       },
     });
+    type MilestoneRow = (typeof milestones)[number];
 
     const goalMilestones = milestones
-      .filter((m) => m.dueDate)
-      .map((m) => ({
+      .filter((m: MilestoneRow) => m.dueDate)
+      .map((m: MilestoneRow) => ({
         id: `milestone_${m.id}`,
         title: `${m.goal.title}: ${m.title}`,
         description: m.description || m.goal.title || "Goal milestone",

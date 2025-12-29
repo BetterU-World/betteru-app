@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import prisma from "@/lib/prisma";
 import { getPrismaUserIdFromClerk } from "@/lib/user-helpers";
-import { TransactionType, FinanceTransaction } from "@prisma/client";
 import { getSystemCalendarBySlug } from "@/lib/calendars/defaults";
 import { encryptText, decryptText, makePreview } from "@/lib/encryption";
+type TransactionType = "INCOME" | "EXPENSE";
 
 // GET /api/finances/transactions - List transactions with optional filters
 export async function GET(request: Request) {
@@ -52,8 +52,9 @@ export async function GET(request: Request) {
       where,
       orderBy: { date: "desc" },
     });
+    type FinanceTransactionRow = (typeof transactions)[number];
     // Decrypt details server-side and attach previews
-    const safeTransactions = transactions.map((t: FinanceTransaction) => {
+    const safeTransactions = transactions.map((t: FinanceTransactionRow) => {
       let details: string | null = null;
       const enc = (t as any).encryptedDetails as string | null | undefined;
       if (enc) {
@@ -76,12 +77,12 @@ export async function GET(request: Request) {
 
     // Calculate summary
     const totalIncome = safeTransactions
-      .filter((t: FinanceTransaction) => t.type === "INCOME")
-      .reduce((sum: number, t: FinanceTransaction) => sum + (t as any).amount, 0);
+      .filter((t: FinanceTransactionRow) => t.type === "INCOME")
+      .reduce((sum: number, t: FinanceTransactionRow) => sum + (t as any).amount, 0);
 
     const totalExpenses = safeTransactions
-      .filter((t: FinanceTransaction) => t.type === "EXPENSE")
-      .reduce((sum: number, t: FinanceTransaction) => sum + (t as any).amount, 0);
+      .filter((t: FinanceTransactionRow) => t.type === "EXPENSE")
+      .reduce((sum: number, t: FinanceTransactionRow) => sum + (t as any).amount, 0);
 
     const net = totalIncome - totalExpenses;
 

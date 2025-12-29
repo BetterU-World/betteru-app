@@ -22,9 +22,31 @@ export const metadata: Metadata = {
   title: "BetterU",
   description: "BetterU",
   // Link web app manifest via Next.js metadata
-  manifest: "/manifest.json",
+  manifest: "/manifest.webmanifest",
   // Theme color used by PWA install surfaces
   themeColor: "#0f172a",
+  // iOS PWA specific configuration
+  appleWebApp: {
+    capable: true,
+    title: "BetterU",
+    statusBarStyle: "black-translucent",
+  },
+  // Ensure full screen usage in standalone mode
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+  },
+  // Provide icon metadata for PWA + iOS
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180" },
+    ],
+  },
 };
 
 export default function RootLayout({

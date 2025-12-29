@@ -12,3 +12,15 @@ services:
         sync: false
       - key: CLERK_SECRET_KEY
         sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: DIARY_ENCRYPTION_KEY
+        sync: false

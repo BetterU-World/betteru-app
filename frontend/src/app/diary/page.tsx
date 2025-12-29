@@ -32,8 +32,16 @@ interface DiaryEntry {
 }
 
 export default function DiaryPage() {
-  // Daily State (local-only UI persistence)
-  const todayKey = new Date().toISOString().slice(0, 10);
+  // Daily State helpers
+  const toLocalDayKey = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  };
+
+  // Daily State (local-first, server source of truth)
+  const todayKey = toLocalDayKey(new Date());
   const [dailyMood, setDailyMood] = useState<number>(5);
   const [dailyEnergy, setDailyEnergy] = useState<number>(5);
   const [dailyStress, setDailyStress] = useState<number>(5);
@@ -72,41 +80,57 @@ export default function DiaryPage() {
   useEffect(() => {
     checkLockAndFetch();
     fetchSuggestions();
-    // Load Daily State
-    try {
-      const ob = localStorage.getItem(ONBOARDING_KEY);
-      setOnboardingDismissed(ob === "1");
-      const raw = localStorage.getItem(`dailyState:${todayKey}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (typeof parsed.mood === "number") setDailyMood(parsed.mood);
-        if (typeof parsed.energy === "number") setDailyEnergy(parsed.energy);
-        if (typeof parsed.stress === "number") setDailyStress(parsed.stress);
-        if (typeof parsed.sleep === "number") setSleepHours(parsed.sleep);
-        setLoggedToday(true);
-      }
-      const rawLog = localStorage.getItem("dailyState:log");
-      if (rawLog) {
-        const list = JSON.parse(rawLog);
-        if (Array.isArray(list)) setDailyLog(list);
-      }
-      // Build logged dates set from localStorage keys
-      const set = new Set<string>();
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key) continue;
-        if (key.startsWith("dailyState:")) {
-          const day = key.substring("dailyState:".length);
-          if (/^\d{4}-\d{2}-\d{2}$/.test(day)) set.add(day);
+    // Load Daily State from server first; fall back to localStorage if none
+    (async () => {
+      try {
+        const ob = localStorage.getItem(ONBOARDING_KEY);
+        setOnboardingDismissed(ob === "1");
+
+        const res = await fetch(`/api/daily-state?day=${todayKey}`);
+        const data = await res.json().catch(() => ({}));
+        const state = data?.state as | { moodInt?: number | null; energyInt?: number | null; stressInt?: number | null; sleepHours?: number | null } | null;
+        if (res.ok && state) {
+          if (typeof state.moodInt === "number") setDailyMood(state.moodInt);
+          if (typeof state.energyInt === "number") setDailyEnergy(state.energyInt);
+          if (typeof state.stressInt === "number") setDailyStress(state.stressInt);
+          if (typeof state.sleepHours === "number") setSleepHours(state.sleepHours);
+          setLoggedToday(true);
+          setLoggedDates((prev) => new Set(prev).add(todayKey));
+        } else {
+          // Fallback: local cache
+          const raw = localStorage.getItem(`dailyState:${todayKey}`);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (typeof parsed.mood === "number") setDailyMood(parsed.mood);
+            if (typeof parsed.energy === "number") setDailyEnergy(parsed.energy);
+            if (typeof parsed.stress === "number") setDailyStress(parsed.stress);
+            if (typeof parsed.sleep === "number") setSleepHours(parsed.sleep);
+            setLoggedToday(true);
+          }
         }
-      }
-      setLoggedDates(set);
-    } catch {}
+
+        const rawLog = localStorage.getItem("dailyState:log");
+        if (rawLog) {
+          const list = JSON.parse(rawLog);
+          if (Array.isArray(list)) setDailyLog(list);
+        }
+        // Build logged dates set from localStorage keys
+        const set = new Set<string>();
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!key) continue;
+          if (key.startsWith("dailyState:")) {
+            const day = key.substring("dailyState:".length);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(day)) set.add(day);
+          }
+        }
+        setLoggedDates((prev) => new Set([...Array.from(prev), ...Array.from(set)]));
+      } catch {}
+    })();
   }, []);
 
   const handleLogDailyState = () => {
     try {
-      if (loggedToday) return;
       const rec = { mood: dailyMood, energy: dailyEnergy, stress: dailyStress, sleep: sleepHours };
       localStorage.setItem(`dailyState:${todayKey}`, JSON.stringify(rec));
       setDailyLog((prev) => {
@@ -124,6 +148,42 @@ export default function DiaryPage() {
         next.add(todayKey);
         return next;
       });
+      // Persist to API (non-blocking)
+      try {
+        fetch("/api/daily-state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dayKey: todayKey,
+            moodInt: dailyMood,
+            energyInt: dailyEnergy,
+            stressInt: dailyStress,
+            sleepHours,
+          }),
+        })
+          .then(() => {
+            // ensure UI reflects server as source of truth next time
+          })
+          .catch(() => {});
+      } catch {}
+    } catch {}
+  };
+
+  const handleClearToday = async () => {
+    try {
+      await fetch("/api/daily-state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dayKey: todayKey, moodInt: null, energyInt: null, stressInt: null, sleepHours: null }),
+      });
+      // Clear local cache
+      try { localStorage.removeItem(`dailyState:${todayKey}`); } catch {}
+      setLoggedToday(false);
+      // Optional: reset to defaults
+      setDailyMood(5);
+      setDailyEnergy(5);
+      setDailyStress(5);
+      setSleepHours(7);
     } catch {}
   };
 
@@ -421,6 +481,8 @@ export default function DiaryPage() {
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + "...";
   };
+
+  const formatHours = (h: number) => (Number.isInteger(h) ? String(h) : h.toFixed(1));
 
   // Scroll to entries section when date is selected
   useEffect(() => {
@@ -889,36 +951,36 @@ export default function DiaryPage() {
             <div className="space-y-5">
               <div>
                 <div className="flex justify-between text-sm mb-1"><span>Mood</span><span className="font-medium">{dailyMood}</span></div>
-                <input type="range" min={0} max={10} value={dailyMood} onChange={(e) => setDailyMood(parseInt(e.target.value))} className="w-full disabled:opacity-60" disabled={loggedToday} />
+                <input type="range" min={0} max={10} value={dailyMood} onChange={(e) => setDailyMood(parseInt(e.target.value))} className="w-full" />
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-1"><span>Energy</span><span className="font-medium">{dailyEnergy}</span></div>
-                <input type="range" min={0} max={10} value={dailyEnergy} onChange={(e) => setDailyEnergy(parseInt(e.target.value))} className="w-full disabled:opacity-60" disabled={loggedToday} />
+                <input type="range" min={0} max={10} value={dailyEnergy} onChange={(e) => setDailyEnergy(parseInt(e.target.value))} className="w-full" />
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-1"><span>Stress</span><span className="font-medium">{dailyStress}</span></div>
-                <input type="range" min={0} max={10} value={dailyStress} onChange={(e) => setDailyStress(parseInt(e.target.value))} className="w-full disabled:opacity-60" disabled={loggedToday} />
+                <input type="range" min={0} max={10} value={dailyStress} onChange={(e) => setDailyStress(parseInt(e.target.value))} className="w-full" />
               </div>
               <div>
-                <div className="flex justify-between text-sm mb-1"><span>Sleep (hrs)</span><span className="font-medium">{sleepHours}</span></div>
-                <input type="range" min={0} max={12} value={sleepHours} onChange={(e) => setSleepHours(parseInt(e.target.value))} className="w-full disabled:opacity-60" disabled={loggedToday} />
+                <div className="flex justify-between text-sm mb-1"><span>Sleep</span><span className="font-medium">{formatHours(sleepHours)} hours</span></div>
+                <input type="range" min={0} max={12} step={0.5} value={sleepHours} onChange={(e) => setSleepHours(parseFloat(e.target.value))} className="w-full" />
               </div>
 
-              {/* Log Button */}
-              <div className="pt-1">
-                {!loggedToday ? (
+              {/* Actions */}
+              <div className="pt-1 flex items-center gap-3">
+                <button
+                  onClick={handleLogDailyState}
+                  className="flex-1 inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm transition"
+                >
+                  {loggedToday ? "Update Daily State" : "Log Daily State"}
+                </button>
+                {loggedToday && (
                   <button
-                    onClick={handleLogDailyState}
-                    className="w-full inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm transition"
+                    type="button"
+                    onClick={handleClearToday}
+                    className="px-3 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50"
                   >
-                    Log Daily State
-                  </button>
-                ) : (
-                  <button
-                    disabled
-                    className="w-full inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-slate-400 cursor-not-allowed rounded-md"
-                  >
-                    Logged for today
+                    Clear today
                   </button>
                 )}
               </div>
@@ -933,7 +995,7 @@ export default function DiaryPage() {
                     {dailyLog.slice(0,7).map((r) => (
                       <li key={r.dayKey} className="py-2 text-sm flex items-center justify-between">
                         <span className="text-slate-600">{r.dayKey}</span>
-                        <span className="text-slate-900 font-medium">M{r.mood} · E{r.energy} · S{r.stress} · {r.sleep}h</span>
+                        <span className="text-slate-900 font-medium">M{r.mood} · E{r.energy} · S{r.stress} · {formatHours(r.sleep)}h</span>
                       </li>
                     ))}
                   </ul>

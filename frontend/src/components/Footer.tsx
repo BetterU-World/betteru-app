@@ -60,6 +60,12 @@ export function Footer() {
           >
             Charity / Impact
           </a>
+          <a
+            href="/feedback"
+            className="text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            Feedback
+          </a>
         </nav>
 
         {/* Copyright & disclaimer */}

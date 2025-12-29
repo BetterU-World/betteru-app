@@ -24,6 +24,7 @@ export default async function AdminSecurityPage() {
     where: { createdAt: { gte: since } },
     orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
   });
+  type FlagRow = (typeof flags)[number];
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-4">
@@ -44,7 +45,7 @@ export default async function AdminSecurityPage() {
             </tr>
           </thead>
           <tbody>
-            {flags.map((f) => (
+            {flags.map((f: FlagRow) => (
               <tr key={f.id} className="border-b">
                 <td className="p-3">
                   <div className="font-mono text-xs">{f.userId}</div>
@@ -71,7 +72,7 @@ export default async function AdminSecurityPage() {
       <details className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
         <summary className="cursor-pointer font-medium">Raw metadata</summary>
         <div className="mt-3 space-y-2">
-          {flags.map((f) => (
+          {flags.map((f: FlagRow) => (
             <div key={f.id} className="text-xs">
               <div className="font-semibold">{f.id}</div>
               <pre className="bg-slate-50 p-2 rounded border border-slate-200 overflow-auto">{JSON.stringify(f.metadata, null, 2)}</pre>

@@ -23,8 +23,7 @@ export const metadata: Metadata = {
   description: "BetterU",
   // Link web app manifest via Next.js metadata
   manifest: "/manifest.webmanifest",
-  // Theme color used by PWA install surfaces
-  themeColor: "#0f172a",
+  // Theme color moved to viewport export
   // iOS PWA specific configuration
   appleWebApp: {
     capable: true,
@@ -32,11 +31,6 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
   },
   // Ensure full screen usage in standalone mode
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    viewportFit: "cover",
-  },
   // Provide icon metadata for PWA + iOS
   icons: {
     icon: [
@@ -47,6 +41,14 @@ export const metadata: Metadata = {
       { url: "/icons/apple-touch-icon.png", sizes: "180x180" },
     ],
   },
+};
+
+// Move viewport and themeColor into the dedicated viewport export
+export const viewport = {
+  themeColor: "#0f172a",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

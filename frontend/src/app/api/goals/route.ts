@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import prisma from "@/lib/prisma";
 import { getPrismaUserIdFromClerk } from "@/lib/user-helpers";
-// Local minimal types to satisfy strict TS without relying on Prisma exports
-type GoalStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ARCHIVED";
+import { GoalStatus } from "@prisma/client";
+import type { Goal } from "@prisma/client";
 type GoalPriority = "LOW" | "MEDIUM" | "HIGH";
 
 // GET /api/goals - List goals with optional filters
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const statusParam = searchParams.get("status") as GoalStatus | "ALL" | null;
+    const statusParam = searchParams.get("status") as Goal["status"] | "ALL" | null;
     const category = searchParams.get("category");
     const fromParam = searchParams.get("from");
     const toParam = searchParams.get("to");
@@ -29,13 +29,13 @@ export async function GET(request: Request) {
     // Build where clause
     const where: {
       userId: string;
-      status?: GoalStatus;
+      status?: Goal["status"];
       category?: string;
       targetDate?: { gte?: Date; lte?: Date };
     } = { userId };
 
     if (statusParam && statusParam !== "ALL") {
-      where.status = statusParam as GoalStatus;
+      where.status = statusParam as Goal["status"];
     }
 
     if (category) {
@@ -66,7 +66,7 @@ export async function GET(request: Request) {
     });
 
     // Calculate summary
-    const allGoals = await prisma.goal.findMany({
+    const allGoals: Array<{ status: Goal["status"] }> = await prisma.goal.findMany({
       where: { userId },
       select: { status: true },
     });
@@ -74,10 +74,10 @@ export async function GET(request: Request) {
     const summary = {
       total: allGoals.length,
       active: allGoals.filter(
-        (g) => g.status === "NOT_STARTED" || g.status === "IN_PROGRESS"
+        (g) => g.status === GoalStatus.NOT_STARTED || g.status === GoalStatus.IN_PROGRESS
       ).length,
-      inProgress: allGoals.filter((g) => g.status === "IN_PROGRESS").length,
-      completed: allGoals.filter((g) => g.status === "COMPLETED").length,
+      inProgress: allGoals.filter((g) => g.status === GoalStatus.IN_PROGRESS).length,
+      completed: allGoals.filter((g) => g.status === GoalStatus.COMPLETED).length,
     };
 
     return NextResponse.json({ goals, summary });
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
         description: description || "",
         category: category || "General",
         priority: priority || "MEDIUM",
-        status: status || "NOT_STARTED",
+        status: status || GoalStatus.NOT_STARTED,
         progress: progress || 0,
         startDate: startDate ? new Date(startDate) : null,
         targetDate: new Date(targetDate),
@@ -233,7 +233,7 @@ export async function PATCH(request: Request) {
       startDate?: Date | null;
       targetDate?: Date;
       progress?: number;
-      status?: GoalStatus;
+      status?: Goal["status"];
       completedAt?: Date | null;
     } = {};
 
@@ -259,13 +259,13 @@ export async function PATCH(request: Request) {
       updateData.progress = Math.max(0, Math.min(100, progress));
     }
     if (status) {
-      updateData.status = status as GoalStatus;
+      updateData.status = status as Goal["status"];
       // Set completedAt when marking as completed
-      if (status === "COMPLETED" && existingGoal.status !== "COMPLETED") {
+      if (status === GoalStatus.COMPLETED && existingGoal.status !== GoalStatus.COMPLETED) {
         updateData.completedAt = new Date();
       }
       // Clear completedAt when moving away from completed
-      if (status !== "COMPLETED" && existingGoal.status === "COMPLETED") {
+      if (status !== GoalStatus.COMPLETED && existingGoal.status === GoalStatus.COMPLETED) {
         updateData.completedAt = null;
       }
     }
@@ -331,7 +331,7 @@ export async function DELETE(request: Request) {
       // Soft delete by archiving
       await prisma.goal.update({
         where: { id },
-        data: { status: "ARCHIVED" },
+        data: { status: GoalStatus.ARCHIVED },
       });
     } else {
       // Hard delete (GoalSteps will be cascade deleted)

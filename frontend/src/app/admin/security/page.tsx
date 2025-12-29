@@ -1,6 +1,5 @@
 import prisma from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
-import type { SecurityFlag } from "@prisma/client";
 
 function isAdminEmail(email: string | null | undefined) {
   const env = process.env.ADMIN_EMAILS || "";
@@ -45,7 +44,7 @@ export default async function AdminSecurityPage() {
             </tr>
           </thead>
           <tbody>
-            {flags.map((f: SecurityFlag) => (
+            {flags.map((f) => (
               <tr key={f.id} className="border-b">
                 <td className="p-3">
                   <div className="font-mono text-xs">{f.userId}</div>
@@ -72,7 +71,7 @@ export default async function AdminSecurityPage() {
       <details className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
         <summary className="cursor-pointer font-medium">Raw metadata</summary>
         <div className="mt-3 space-y-2">
-          {flags.map((f: SecurityFlag) => (
+          {flags.map((f) => (
             <div key={f.id} className="text-xs">
               <div className="font-semibold">{f.id}</div>
               <pre className="bg-slate-50 p-2 rounded border border-slate-200 overflow-auto">{JSON.stringify(f.metadata, null, 2)}</pre>

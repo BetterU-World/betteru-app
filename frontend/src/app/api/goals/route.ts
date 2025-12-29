@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import prisma from "@/lib/prisma";
 import { getPrismaUserIdFromClerk } from "@/lib/user-helpers";
-import { GoalStatus, GoalPriority, Goal } from "@prisma/client";
+// Local minimal types to satisfy strict TS without relying on Prisma exports
+type GoalStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ARCHIVED";
+type GoalPriority = "LOW" | "MEDIUM" | "HIGH";
 
 // GET /api/goals - List goals with optional filters
 export async function GET(request: Request) {
@@ -72,13 +74,10 @@ export async function GET(request: Request) {
     const summary = {
       total: allGoals.length,
       active: allGoals.filter(
-        (g: { status: GoalStatus }) =>
-          g.status === "NOT_STARTED" || g.status === "IN_PROGRESS"
+        (g) => g.status === "NOT_STARTED" || g.status === "IN_PROGRESS"
       ).length,
-      inProgress: allGoals.filter((g: { status: GoalStatus }) => g.status === "IN_PROGRESS")
-        .length,
-      completed: allGoals.filter((g: { status: GoalStatus }) => g.status === "COMPLETED")
-        .length,
+      inProgress: allGoals.filter((g) => g.status === "IN_PROGRESS").length,
+      completed: allGoals.filter((g) => g.status === "COMPLETED").length,
     };
 
     return NextResponse.json({ goals, summary });

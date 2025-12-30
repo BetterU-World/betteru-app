@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { getClerkClient } from "@/lib/clerk";
 import { requireUserId } from "@/lib/auth/requireUser";
 
@@ -26,17 +26,16 @@ export async function POST(req: NextRequest) {
     const origin =
       process.env.NEXT_PUBLIC_APP_URL || req.headers.get("origin") || "";
 
-    const portalSession = await stripe.billingPortal.sessions.create({
+    const portalSession = await getStripe().billingPortal.sessions.create({
       customer: stripeCustomerId,
       return_url: `${origin}/dashboard`,
     });
 
     return NextResponse.json({ url: portalSession.url });
-  } catch (err: any) {
-    console.error("Portal error:", err);
-    return NextResponse.json(
-      { error: err.message || "Something went wrong" },
-      { status: 500 }
-    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Something went wrong";
+    const status = message.includes("Missing STRIPE_SECRET_KEY") ? 500 : 500;
+    console.error("Portal error:", message);
+    return NextResponse.json({ error: message }, { status });
   }
 }

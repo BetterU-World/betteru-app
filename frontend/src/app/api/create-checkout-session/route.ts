@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs"; // ensure we can read the raw body / use Stripe properly
 export const dynamic = "force-dynamic";
 
 const priceId = process.env.STRIPE_PRICE_ID;
-
-if (!priceId) {
-  throw new Error("Missing STRIPE_PRICE_ID in environment");
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,7 +14,14 @@ export async function POST(req: NextRequest) {
       userId: "",
     }));
 
-    const session = await stripe.checkout.sessions.create({
+    if (!priceId) {
+      return NextResponse.json(
+        { error: "Missing STRIPE_PRICE_ID in environment" },
+        { status: 500 }
+      );
+    }
+
+    const session = await getStripe().checkout.sessions.create({
       mode: "subscription",
       line_items: [
         {

@@ -5,19 +5,43 @@ function setSecurityHeaders(res: NextResponse) {
   // In development, do not set CSP to avoid blocking Next.js dev tooling (eval, inline scripts, HMR websockets).
   // In production, set a conservative CSP compatible with Clerk/Stripe.
   if (process.env.NODE_ENV === "production") {
+    const clerkFrontendApi = process.env.NEXT_PUBLIC_CLERK_FRONTEND_API;
+    const clerkSources = [
+      "https://*.clerk.com",
+      "https://*.clerk.dev",
+      "https://*.clerk.accounts",
+    ];
+    if (clerkFrontendApi) {
+      clerkSources.push(`https://${clerkFrontendApi}`);
+    }
+
     const csp = [
+      // Keep defaults strict
       "default-src 'self'",
-      "script-src 'self' https://*.clerk.com https://*.clerk.dev",
+      // Allow Clerk script hosting domains; do not enable unsafe-eval/inline for scripts
+      ["script-src 'self'", ...clerkSources].join(" "),
+      // Allow inline styles (Clerk UI often injects styles)
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://*.clerk.com https://*.clerk.dev",
+      // Permit images from Clerk plus data/blob URIs
+      ["img-src 'self' data: blob:", ...clerkSources].join(" "),
+      // Permit fonts from self and data URIs
       "font-src 'self' data:",
-      "connect-src 'self' https://api.clerk.com https://*.clerk.com https://*.clerk.dev https://*.stripe.com",
+      // Permit XHR/fetch/WebSocket to Clerk APIs and Stripe
+      [
+        "connect-src 'self' https://api.clerk.com https://*.stripe.com",
+        ...clerkSources,
+      ].join(" "),
+      // Prevent embedding by other sites
       "frame-ancestors 'none'",
-      "frame-src https://*.stripe.com https://*.clerk.com https://*.clerk.dev",
+      // Permit frames for Stripe and Clerk (for hosted widgets)
+      ["frame-src https://*.stripe.com", ...clerkSources].join(" "),
+      // Media and object rules remain strict
       "media-src 'self' blob:",
       "object-src 'none'",
     ].join("; ");
     res.headers.set("Content-Security-Policy", csp);
+    // Temporary debug header to verify CSP in production responses
+    res.headers.set("X-Debug-CSP", csp);
   } else {
     // Dev-only notice: avoid logging user content.
     console.warn("[Security] CSP disabled in development to avoid Next.js dev tooling breakage.");

@@ -6,7 +6,7 @@ import { calculateRevenueSplit } from "@/lib/payments";
 
 export const runtime = "nodejs"; // important for raw body
 
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
   const sig = req.headers.get("stripe-signature");
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.text(); // raw body
-    event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
+    event = getStripe().webhooks.constructEvent(body, sig, webhookSecret);
   } catch (err: any) {
     console.error("Webhook signature error:", err.message);
     return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });

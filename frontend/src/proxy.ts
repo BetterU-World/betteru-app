@@ -38,12 +38,18 @@ function setSecurityHeaders(res: NextResponse) {
 }
 
 const isPublicRoute = createRouteMatcher([
+  // Gateway and public marketing/landing
+  "/",
   "/invite(.*)",
   "/landing(.*)",
   "/checkout(.*)",
   "/success(.*)",
+  // Clerk auth routes must remain publicly accessible
   "/sign-in(.*)",
   "/sign-up(.*)",
+  "/sso-callback(.*)",
+  "/oauth-callback(.*)",
+  // API and Next internals
   "/api/(.*)",
   "/_next/(.*)",
 ]);

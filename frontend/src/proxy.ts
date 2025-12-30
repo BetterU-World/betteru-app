@@ -7,13 +7,13 @@ function setSecurityHeaders(res: NextResponse) {
   if (process.env.NODE_ENV === "production") {
     const csp = [
       "default-src 'self'",
-      "script-src 'self'",
+      "script-src 'self' https://*.clerk.com https://*.clerk.dev",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
+      "img-src 'self' data: blob: https://*.clerk.com https://*.clerk.dev",
       "font-src 'self' data:",
-      "connect-src 'self' https://api.clerk.com https://*.stripe.com",
+      "connect-src 'self' https://api.clerk.com https://*.clerk.com https://*.clerk.dev https://*.stripe.com",
       "frame-ancestors 'none'",
-      "frame-src https://*.stripe.com",
+      "frame-src https://*.stripe.com https://*.clerk.com https://*.clerk.dev",
       "media-src 'self' blob:",
       "object-src 'none'",
     ].join("; ");

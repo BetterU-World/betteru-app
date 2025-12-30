@@ -47,6 +47,22 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
+  // Bypass non-same-origin requests entirely so the browser handles them
+  // This prevents intercepting external scripts like Clerk/Stripe assets
+  if (url.origin !== self.location.origin) {
+    // Additionally bypass known Clerk domains explicitly
+    const host = url.hostname;
+    const isClerkHost =
+      host === 'clerk.betteru.living' ||
+      host === 'accounts.clerk.com' ||
+      host === 'api.clerk.com' ||
+      host.endsWith('.clerk.com') ||
+      host.endsWith('.clerk.dev') ||
+      host.endsWith('.clerk.accounts');
+    if (isClerkHost) return;
+    return;
+  }
+
   // Avoid caching API and auth-sensitive routes
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/sign-in') || url.pathname.startsWith('/sign-up')) {
     return; // let the network handle it
@@ -64,7 +80,11 @@ self.addEventListener('fetch', (event) => {
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {});
             return response;
           })
-          .catch(() => caches.match('/offline.html'));
+          .catch(async () => {
+            const cache = await caches.open(CACHE_NAME);
+            const offline = await cache.match('/offline.html');
+            return offline || Response.error();
+          });
       })
     );
     return;
@@ -79,5 +99,9 @@ self.addEventListener('fetch', (event) => {
         return offline || Response.error();
       })
     );
+    return;
   }
+
+  // For remaining same-origin GET requests, pass through to network explicitly
+  event.respondWith(fetch(request));
 });

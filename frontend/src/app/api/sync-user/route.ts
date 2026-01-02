@@ -1,3 +1,4 @@
+export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { getClerkClient } from "@/lib/clerk";
 import { requireUserId } from "@/lib/auth/requireUser";

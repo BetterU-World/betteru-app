@@ -3,6 +3,7 @@ import InitializeAffiliateButton from "@/components/InitializeAffiliateButton";
 import CopyButton from "@/components/CopyButton";
 import ReferralStats from "@/components/ReferralStats";
 import AffiliateHQClient from "@/components/affiliate/AffiliateHQClient";
+import AffiliateConnectClient from "./AffiliateConnectClient";
 
 export default async function AffiliatePage() {
   const user = await getCurrentBetterUUser();
@@ -75,6 +76,9 @@ export default async function AffiliatePage() {
             </div>
           )}
         </div>
+
+        {/* Stripe Connect (Express) */}
+        <AffiliateConnectClient />
 
         {/* Affiliate HQ / Resources */}
         <AffiliateHQClient />

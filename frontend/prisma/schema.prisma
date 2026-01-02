@@ -78,6 +78,12 @@ model User {
   // Privacy tracking
   zeroTrackingMode       Boolean  @default(true)
   analyticsOptInAt       DateTime?
+  // Stripe Connect (Express)
+  stripeConnectAccountId      String?  @unique
+  stripeConnectStatus         String?  // "unconnected" | "pending" | "complete"
+  stripeConnectChargesEnabled Boolean  @default(false)
+  stripeConnectPayoutsEnabled Boolean  @default(false)
+  stripeConnectDetailsSubmitted Boolean @default(false)
   Commission          Commission[]
   Payout              Payout[]
   Referral            Referral[]

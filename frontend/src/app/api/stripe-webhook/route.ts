@@ -32,6 +32,39 @@ export async function POST(req: NextRequest) {
 
   try {
     switch (event.type) {
+      case "account.updated": {
+        const account = event.data.object as Stripe.Account;
+        const acctId = account.id;
+
+        try {
+          const user = await prisma.user.findFirst({
+            where: { stripeConnectAccountId: acctId },
+          });
+
+          if (user) {
+            const chargesEnabled = !!account.charges_enabled;
+            const payoutsEnabled = !!account.payouts_enabled;
+            const detailsSubmitted = !!account.details_submitted;
+            const status = payoutsEnabled && detailsSubmitted ? "complete" : "pending";
+
+            await prisma.user.update({
+              where: { id: user.id },
+              data: {
+                stripeConnectChargesEnabled: chargesEnabled,
+                stripeConnectPayoutsEnabled: payoutsEnabled,
+                stripeConnectDetailsSubmitted: detailsSubmitted,
+                stripeConnectStatus: status,
+              },
+            });
+          } else {
+            console.log("No user found for updated account", acctId);
+          }
+        } catch (accErr) {
+          console.error("Failed to update user for account.updated:", accErr);
+        }
+
+        break;
+      }
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
 
